@@ -1,4 +1,4 @@
-package ru.openfs.model;
+package ru.openfs.sberonline.model;
 
 public enum SberOnlineCode {
     ERR(-1, "Внутренняя ошибка"), // don't define in sber proto, need 300

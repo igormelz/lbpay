@@ -1,4 +1,4 @@
-package ru.openfs;
+package ru.openfs.dreamkas;
 
 import java.util.List;
 
@@ -6,7 +6,9 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
+import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
@@ -26,7 +28,7 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
-import ru.openfs.model.Receipt;
+import ru.openfs.dreamkas.model.Receipt;
 
 @Path("/pay/dreamkas")
 public class DreamkasResource {
@@ -114,55 +116,78 @@ public class DreamkasResource {
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    public Uni<Void> webhook(JsonObject message) {
+    public void webhook(JsonObject message) {
         JsonObject data = message.getJsonObject("data");
-        if (data == null || !data.containsKey("externalId")) {
-            LOG.error("!!! unparsed data:{}", message.encode());
-            return Uni.createFrom().voidItem();
+        if (!data.containsKey("externalId")) {
+            return;
         }
 
-        JsonObject orderInfo = new JsonObject();
         service.getOrder(data.getString("externalId")).subscribe().with(order -> {
-            orderInfo.put("order", JsonObject.mapFrom(order));
-        });
-
-        if (message.getString("type").equalsIgnoreCase("OPERATION")) {
-            if (data.getString("status").equalsIgnoreCase("ERROR")) {
-                LOG.error("!!! register orderNumber:{} - {}", orderInfo.getString("orderNumber"),
-                        data.getJsonObject("data").getJsonObject("error").getString("message"));
-            } else {
-                LOG.info("--> register orderNumber:{}, operation:{}, status:{}", orderInfo.getString("orderNumber"),
-                        data.getString("id"), data.getString("status"));
+            if (message.getString("type").equalsIgnoreCase("OPERATION")) {
+                if (data.getString("status").equalsIgnoreCase("ERROR")) {
+                    LOG.error("!!! register orderNumber:{} - {}", order.getString("orderNumber"),
+                            data.getJsonObject("data").getJsonObject("error").getString("message"));
+                } else {
+                    LOG.info("--> register orderNumber:{}, operation:{}, status:{}", order.getString("orderNumber"),
+                            data.getString("id"), data.getString("status"));
+                }
+                service.setOperation(data).subscribe().with(i -> {
+                });
             }
-            return service.setOperation(data);
-        }
 
-        if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
-            LOG.info("--> ofd receipt orderNumber:{}, shift:{}, doc:{}", orderInfo.getString("orderNumber"),
-                    message.getJsonObject("data").getLong("shiftId"),
-                    message.getJsonObject("data").getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
-        }
-        return Uni.createFrom().voidItem();
+            if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
+                LOG.info("--> register orderNumber:{}, ofd receipt shift:{}, doc:{}", order.getString("orderNumber"),
+                        message.getJsonObject("data").getLong("shiftId"),
+                        message.getJsonObject("data").getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
+            }
+        });
     }
 
     @GET
     @Path("orders")
     public Uni<List<String>> getOrders() {
-        return service.keys();
+        return service.orders();
     }
 
     @GET
     @Path("orders/{key}/operation")
     @Produces(MediaType.APPLICATION_JSON)
-    public Uni<String> operation(@PathParam("key") String key) {
+    public Uni<JsonObject> operation(@PathParam("key") String key) {
         return service.getOperation(key);
     }
 
     @GET
     @Path("orders/{key}/order")
     @Produces(MediaType.APPLICATION_JSON)
-    public Uni<String> order(@PathParam("key") String key) {
+    public Uni<JsonObject> order(@PathParam("key") String key) {
         return service.getOrder(key);
+    }
+
+    @PUT
+    @Path("orders/{key}")
+    @Produces(MediaType.TEXT_PLAIN)
+    public Uni<String> registerOrder(@PathParam("key") String key) {
+        JsonObject order = service.getOrder(key).await().indefinitely();
+        if (order.isEmpty()) {
+            LOG.error("!!! re-processing order:{} not found", key);
+            throw new NotFoundException("order not found");
+        }
+        return service.getOperation(key).onItem().transform(oper -> {
+            if (oper.isEmpty()) {
+                LOG.warn("re-processing orderNumber:{} on not yet registered", order.getString("orderNumber"));
+                registerSale(order);
+                return "re-processing not registered";
+            } else if (oper.getString("status").equalsIgnoreCase("ERROR")) {
+                LOG.warn("re-processing orderNumber:{} on error:{}", order.getString("orderNumber"),
+                        oper.getJsonObject("data").getJsonObject("error").getString("message"));
+                registerSale(order);
+                return "re-processing on error";
+            } else {
+                LOG.error("!!! do not re-processing orderNumber:{}, status:{}", order.getString("orderNumber"),
+                        oper.getString("status"));
+                return "do not re-rocessing";
+            }
+        });
     }
 
     private Receipt buildReceipt(JsonObject message) {

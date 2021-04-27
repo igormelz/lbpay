@@ -1,4 +1,4 @@
-package ru.openfs.model;
+package ru.openfs.sberonline.model;
 
 import javax.xml.bind.annotation.XmlRootElement;
 

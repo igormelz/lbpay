@@ -1,7 +1,6 @@
-package ru.openfs;
+package ru.openfs.lbsoap;
 
 import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Singleton;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.dataformat.soap.SoapJaxbDataFormat;

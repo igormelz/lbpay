@@ -1,4 +1,4 @@
-package ru.openfs;
+package ru.openfs.lbsoap;
 
 import java.time.Duration;
 import java.util.Collections;

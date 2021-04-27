@@ -1,4 +1,4 @@
-package ru.openfs;
+package ru.openfs.sberonline;
 
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
@@ -28,8 +28,9 @@ import api3.SoapPayment;
 import api3.SoapPaymentFull;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import ru.openfs.model.SberOnlineCode;
-import ru.openfs.model.SberOnlineMessage;
+import ru.openfs.lbsoap.LbSoapService;
+import ru.openfs.sberonline.model.SberOnlineCode;
+import ru.openfs.sberonline.model.SberOnlineMessage;
 
 @Path("/pay/sber/online")
 public class SberOnlineResource {
@@ -171,7 +172,7 @@ public class SberOnlineResource {
             return lbsoap.callService(checkReq, sessionId).getJsonObject("data").mapTo(ExternCheckPaymentResponse.class)
                     .getRet().stream().findFirst();
         } catch (RuntimeException e) {
-            LOG.error("find payment orderNumber:{} return error:{}", pay_id, e.getMessage());
+            LOG.error("!!! find payment orderNumber:{} return error:{}", pay_id, e.getMessage());
             return Optional.empty();
         }
     }

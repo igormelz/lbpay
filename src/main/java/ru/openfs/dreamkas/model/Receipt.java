@@ -1,4 +1,4 @@
-package ru.openfs.model;
+package ru.openfs.dreamkas.model;
 
 import java.util.List;
 
