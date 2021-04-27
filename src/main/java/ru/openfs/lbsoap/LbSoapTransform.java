@@ -15,13 +15,13 @@ public class LbSoapTransform extends RouteBuilder {
                 new ServiceInterfaceStrategy(api3.Api3PortType.class, true));
 
         // marshal object to soap
-        from("direct:marshalSoap").marshal(soap);
+        from("direct:marshalSoap").id("MarshalSoapMessage").marshal(soap);
 
         // unmarshal byte[] to object
-        from("direct:unmarshalSoap").unmarshal(soap);
+        from("direct:unmarshalSoap").id("UnmarshalSoapMessage").unmarshal(soap);
 
         // process fault
-        from("direct:getFaultMessage").transform(xpath("//detail/text()", String.class));
+        from("direct:getFaultMessage").id("GetFaultMessage").transform(xpath("//detail/text()", String.class));
     }
     
 }
