@@ -1,15 +1,19 @@
 package ru.openfs.sber;
 
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
+import javax.ws.rs.FormParam;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
@@ -25,11 +29,13 @@ import api3.GetAgreementsBriefResponse;
 import api3.GetAgreementsResponse;
 import api3.GetPrePayments;
 import api3.GetPrePaymentsResponse;
+import api3.InsPrePayment;
 import api3.SoapAgreement;
 import api3.SoapAgreementBrief;
 import api3.SoapFilter;
 import api3.SoapPrePayment;
 import io.quarkus.vertx.ConsumeEvent;
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.mutiny.core.MultiMap;
@@ -53,11 +59,14 @@ public class SberResource {
     @ConfigProperty(name = "sber.pass", defaultValue = "user-pass")
     String userPass;
 
-    @ConfigProperty(name = "account.min", defaultValue = "3100000")
-    long minValue;
+    @ConfigProperty(name = "sber.success.url", defaultValue = "ok")
+    String successUrl;
 
-    @ConfigProperty(name = "account.max", defaultValue = "9999999")
-    long maxValue;
+    @ConfigProperty(name = "sber.fail.url", defaultValue = "err")
+    String failUrl;
+
+    @ConfigProperty(name = "account.pattern", defaultValue = "^\\d{6,7}$")
+    String accountPattern;
 
     @Inject
     LbSoapService lbsoap;
@@ -76,23 +85,60 @@ public class SberResource {
 
     @GET
     @Path("checkout")
-    public Response validateAccount(@QueryParam("uid") long account) {
-        if (account > minValue && account < maxValue) {
+    public Response validateAccount(@QueryParam("uid") String account) {
+        if (account.matches(accountPattern)) {
             String sessionId = lbsoap.login();
             try {
-                if (sessionId != null && isActiveAgreement(sessionId, String.valueOf(account)))
+                if (sessionId != null && isActiveAgreement(sessionId, account))
                     return Response.noContent().build();
             } catch (RuntimeException e) {
-                return Response.status(404).build();
+                LOG.error("!!! check account: {}", e.getMessage());
+                return Response.status(Status.BAD_REQUEST).build();
             } finally {
                 lbsoap.logout(sessionId);
             }
         }
-        return Response.status(404).build();
+        return Response.status(Status.BAD_REQUEST).build();
+    }
+
+    @POST
+    @Path("checkout")
+    public Uni<Response> checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
+        if (account.matches(accountPattern) && amount > 10 && amount < 20000) {
+            String sessionId = lbsoap.login();
+            if (sessionId == null)
+                return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
+            try {
+                Optional<SoapAgreementBrief> agrm = findAgreementByNumber(sessionId, account);
+                if (agrm.isPresent() && agrm.get().getClosedon().isBlank()) {
+                    LOG.info("--> checkout account: {}, amount: {}", account, amount);
+                    long orderNumber = createOrderNumber(sessionId, agrm.get().getAgrmid(), amount);
+                    LOG.info("<-- register orderNumber: {}, account: {}, amount: {}", orderNumber, account, amount);
+                    return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
+                        if (item.containsKey("formUrl")) {
+                            LOG.info("--> success registered orderNumber: {} with id: {}", orderNumber,
+                                    item.getString("orderId"));
+                            return Response.seeOther(URI.create(item.getString("formUrl"))).build();
+                        }
+                        if (item.containsKey("errorCode")) {
+                            LOG.error("!!! register payment orderNumber: {} {}", orderNumber,
+                                    item.getString("errorMessage"));
+                        }
+                        return Response.status(Status.BAD_REQUEST).build();
+                    });
+                }
+            } catch (RuntimeException e) {
+                LOG.error("!!! checkout: {}", e.getMessage());
+                return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
+            } finally {
+                lbsoap.logout(sessionId);
+            }
+        }
+        return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
     }
 
     @GET
-    @Path("/sber/callback")
+    @Path("sber/callback")
     public Response callback(@QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
             @QueryParam("operation") String operation, @QueryParam("status") int status) {
 
@@ -166,6 +212,36 @@ public class SberResource {
         return Response.serverError().build();
     }
 
+    private Uni<JsonObject> registerPayment(long orderNumber, String account, double amount) {
+        MultiMap form = MultiMap.caseInsensitiveMultiMap();
+        form.set("userName", userName);
+        form.set("password", userPass);
+        form.set("orderNumber", String.valueOf(orderNumber));
+        form.set("amount", String.valueOf((long) (amount * 100)));
+        form.set("returnUrl", successUrl);
+        form.set("failUrl", failUrl);
+        form.set("description", account);
+        form.set("currency", "643");
+        form.set("language", "ru");
+        form.set("pageView", "DESKTOP");
+        form.set("sessionTimeoutSecs", "300");
+        return client.post("/payment/rest/register.do").sendForm(form).onItem().transform(response -> {
+            return response.bodyAsJsonObject();
+        });
+    }
+
+    private long createOrderNumber(String sessionId, long id, double amount) throws RuntimeException {
+        SoapPrePayment data = new SoapPrePayment();
+        data.setAgrmid(id);
+        data.setAmount(amount);
+        data.setCurname("RUR");
+        data.setComment("form checkout");
+        data.setPaydate(BILL_DATE_FMT.format(LocalDateTime.now()));
+        InsPrePayment request = new InsPrePayment();
+        request.setVal(data);
+        return lbsoap.callService(request, sessionId).getJsonObject("data").getLong("ret");
+    }
+
     private void doConfirmPrePayment(String sessionId, long orderNumber, double amount, String receipt)
             throws RuntimeException {
         ConfirmPrePayment request = new ConfirmPrePayment();
@@ -202,14 +278,18 @@ public class SberResource {
     }
 
     private boolean isActiveAgreement(String sessionId, String number) throws RuntimeException {
+        var account = findAgreementByNumber(sessionId, number);
+        return account.isPresent() && account.get().getClosedon().isBlank();
+    }
+
+    private Optional<SoapAgreementBrief> findAgreementByNumber(String sessionId, String number)
+            throws RuntimeException {
         SoapFilter filter = new SoapFilter();
         filter.setAgrmnum(number);
         GetAgreementsBrief request = new GetAgreementsBrief();
         request.setFlt(filter);
-        Optional<SoapAgreementBrief> account = lbsoap.callService(request, sessionId).getJsonObject("data")
-                .mapTo(GetAgreementsBriefResponse.class).getRet().stream()
-                .filter(agrm -> agrm.getNumber().equalsIgnoreCase(number)).findFirst();
-        return account.isPresent() && account.get().getClosedon().isBlank();
+        return lbsoap.callService(request, sessionId).getJsonObject("data").mapTo(GetAgreementsBriefResponse.class)
+                .getRet().stream().filter(agrm -> agrm.getNumber().equalsIgnoreCase(number)).findFirst();
     }
 
     private void doRegisterReceipt(String sessionId, long uid, long orderNumber, String account, Double amount,
