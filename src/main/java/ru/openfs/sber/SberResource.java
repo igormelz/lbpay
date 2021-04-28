@@ -298,7 +298,7 @@ public class SberResource {
         request.setId(uid);
         GetAccountResponse acct = lbsoap.callService(request, sessionId).getJsonObject("data")
                 .mapTo(GetAccountResponse.class);
-        bus.sendAndForget("register-sale",
+        bus.sendAndForget("receipt-sale",
                 new JsonObject().put("amount", amount).put("orderNumber", String.valueOf(orderNumber))
                         .put("account", account).put("mdOrder", mdOrder)
                         .put("email", acct.getRet().get(0).getAccount().getEmail())

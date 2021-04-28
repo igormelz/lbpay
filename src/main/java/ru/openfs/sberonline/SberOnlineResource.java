@@ -94,12 +94,12 @@ public class SberOnlineResource {
                 LOG.info("<-- success check account: {}", account);
                 return answer;
             } else {
-                LOG.warn("<-- inactive account: {}", account);
+                LOG.warn("<-- check account: {} inactive", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_INACTIVE);
             }
         } catch (RuntimeException e) {
             if (e.getMessage().contains("not found")) {
-                LOG.warn("<-- not found account: {}", account);
+                LOG.warn("<-- check account: {} not found", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 e.printStackTrace();
@@ -202,7 +202,7 @@ public class SberOnlineResource {
         acctReq.setId(uid);
         GetAccountResponse acct = lbsoap.callService(acctReq, sessionId).getJsonObject("data")
                 .mapTo(GetAccountResponse.class);
-        bus.sendAndForget("register-sale",
+        bus.sendAndForget("receipt-sale",
                 new JsonObject().put("amount", amount).put("orderNumber", pay_id).put("account", account)
                         .put("mdOrder", UUID.randomUUID().toString())
                         .put("email", acct.getRet().get(0).getAccount().getEmail())
