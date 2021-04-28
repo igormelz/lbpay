@@ -34,6 +34,7 @@ import api3.SoapAgreement;
 import api3.SoapAgreementBrief;
 import api3.SoapFilter;
 import api3.SoapPrePayment;
+import io.netty.handler.codec.http.HttpContentEncoder.Result;
 import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
@@ -111,17 +112,16 @@ public class SberResource {
             try {
                 Optional<SoapAgreementBrief> agrm = findAgreementByNumber(sessionId, account);
                 if (agrm.isPresent() && agrm.get().getClosedon().isBlank()) {
-                    LOG.info("--> checkout account: {}, amount: {}", account, amount);
                     long orderNumber = createOrderNumber(sessionId, agrm.get().getAgrmid(), amount);
-                    LOG.info("<-- register orderNumber: {}, account: {}, amount: {}", orderNumber, account, amount);
+                    LOG.info("--> checkout orderNumber: {}, account: {}, amount: {}", orderNumber, account, amount);
                     return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
-                        if (item.containsKey("formUrl")) {
-                            LOG.info("--> success registered orderNumber: {} with id: {}", orderNumber,
+                        if (item.containsKey("formUrl") && item.containsKey("orderId")) {
+                            LOG.info("<-- success checkout orderNumber: {}, orderId: {}", orderNumber,
                                     item.getString("orderId"));
                             return Response.seeOther(URI.create(item.getString("formUrl"))).build();
                         }
                         if (item.containsKey("errorCode")) {
-                            LOG.error("!!! register payment orderNumber: {} {}", orderNumber,
+                            LOG.error("!!! orderNumber: {} checkout: {}", orderNumber,
                                     item.getString("errorMessage"));
                         }
                         return Response.status(Status.BAD_REQUEST).build();
@@ -154,7 +154,7 @@ public class SberResource {
                     if (order.getStatus() == 0) {
                         doConfirmPrePayment(sessionId, orderNumber, order.getAmount(), mdOrder);
                         findAgreementById(sessionId, order.getAgrmid()).ifPresent(account -> {
-                            LOG.info("<-- success refill orderNumber: {}, account: {}, amount: {}", orderNumber,
+                            LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}", orderNumber,
                                     account.getNumber(), order.getAmount());
                             doRegisterReceipt(sessionId, account.getUid(), orderNumber, account.getNumber(),
                                     order.getAmount(), mdOrder);
@@ -163,7 +163,7 @@ public class SberResource {
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                LOG.error("!!! orderNumber: {} don't processed: {}", orderNumber, e.getMessage());
+                LOG.error("!!! orderNumber: {} deposited: {}", orderNumber, e.getMessage());
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -192,7 +192,7 @@ public class SberResource {
                 findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
                     if (order.getStatus() == 0) {
                         doCancelPrePayment(sessionId, orderNumber);
-                        LOG.info("<-- success canceled orderNumber: {}", orderNumber);
+                        LOG.info("<-- success declined orderNumber: {}", orderNumber);
                         // ask and print reason
                         bus.sendAndForget("sber-payment-info", orderNumber);
                     } else {
@@ -201,7 +201,7 @@ public class SberResource {
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                LOG.error("!!! orderNumber: {} don't cancel: {}", orderNumber, e.getMessage());
+                LOG.error("!!! orderNumber: {} declined: {}", orderNumber, e.getMessage());
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -312,10 +312,14 @@ public class SberResource {
         form.set("password", userPass);
         form.set("orderNumber", String.valueOf(orderNumber));
         client.post("/payment/rest/getOrderStatusExtended.do").sendForm(form).subscribe().with(response -> {
-            JsonObject result = response.bodyAsJsonObject();
-            LOG.info("canceled orderNumber: {}, account: {}, amount: {}, reason: {} [{}]", orderNumber,
-                    result.getString("orderDescription"), result.getDouble("amount") / 100,
-                    result.getString("actionCodeDescription"), result.getLong("actionCode"));
+            JsonObject json = response.bodyAsJsonObject();
+            if (!json.getString("errorCode").equalsIgnoreCase("0")) {
+                LOG.warn("!!! orderNumber: {} {}", orderNumber, json.getString("errorMessage"));
+            } else {
+                LOG.info("--> orderNumber: {}, account: {}, amount: {}, reason: {} ({})", orderNumber,
+                        json.getString("orderDescription"), json.getDouble("amount") / 100,
+                        json.getString("actionCodeDescription"), json.getLong("actionCode"));
+            }
         });
     }
 
