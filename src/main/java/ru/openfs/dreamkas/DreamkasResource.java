@@ -27,6 +27,7 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
+import ru.openfs.audit.AuditRepository;
 import ru.openfs.dreamkas.model.Receipt;
 
 @Path("/pay/dreamkas")
@@ -51,7 +52,7 @@ public class DreamkasResource {
     int deviceId;
 
     @Inject
-    DreamkasService service;
+    AuditRepository service;
 
     @Inject
     Vertx vertx;
