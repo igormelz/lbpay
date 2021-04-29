@@ -34,7 +34,6 @@ import api3.SoapAgreement;
 import api3.SoapAgreementBrief;
 import api3.SoapFilter;
 import api3.SoapPrePayment;
-import io.netty.handler.codec.http.HttpContentEncoder.Result;
 import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
@@ -319,7 +318,7 @@ public class SberResource {
                 LOG.warn("!!! orderNumber: {} {}", orderNumber, json.getString("errorMessage"));
             } else {
                 LOG.info("--> orderNumber: {}, account: {}, amount: {}, reason: {} ({})", orderNumber,
-                        json.getString("orderDescription"), json.getDouble("amount") / 100,
+                        json.getString("orderDescription"), json.getLong("amount") / 100,
                         json.getString("actionCodeDescription"), json.getLong("actionCode"));
             }
         });
