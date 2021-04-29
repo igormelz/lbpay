@@ -159,6 +159,8 @@ public class SberResource {
                             doRegisterReceipt(sessionId, account.getUid(), orderNumber, account.getNumber(),
                                     order.getAmount(), mdOrder);
                         });
+                    } else {
+                        LOG.warn("<-- orderNumber: {} processed", orderNumber);
                     }
                 });
                 return Response.ok().build();

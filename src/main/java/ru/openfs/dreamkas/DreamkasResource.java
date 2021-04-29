@@ -97,10 +97,9 @@ public class DreamkasResource {
         }
 
         // create checkpoint
-        service.setOrder(message).subscribe().with(i -> {
-        });
+        service.setOrder(message);
 
-        LOG.info("<-- receipt orderNumber:{}", message.getString("orderNumber"));
+        LOG.info("<-- receipt orderNumber: {}", message.getString("orderNumber"));
         client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
                 .sendJson(buildReceipt(message)).subscribe().with(response -> {
                     JsonObject operation = response.bodyAsJsonObject();
@@ -108,8 +107,7 @@ public class DreamkasResource {
                             operation.getString("status").toLowerCase(), message.getString("orderNumber"),
                             operation.getString("id"));
                     // update checkpoint
-                    service.setOperation(operation).subscribe().with(o -> {
-                    });
+                    service.setOperation(operation);
                 }, err -> {
                     LOG.error("!!! receipt orderNumber: {} - {}", message.getString("orderNumber"), err.getMessage());
                 });
@@ -124,7 +122,8 @@ public class DreamkasResource {
             return;
         }
 
-        service.getOrder(data.getString("externalId")).subscribe().with(order -> {
+        JsonObject order = service.getOrder(data.getString("externalId"));
+        if (!order.isEmpty()) {
             if (message.getString("type").equalsIgnoreCase("OPERATION")) {
                 if (data.getString("status").equalsIgnoreCase("ERROR")) {
                     LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"),
@@ -133,8 +132,7 @@ public class DreamkasResource {
                     LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
                             order.getString("orderNumber"), data.getString("id"));
                 }
-                service.setOperation(data).subscribe().with(i -> {
-                });
+                service.setOperation(data);
             }
 
             if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
@@ -142,54 +140,54 @@ public class DreamkasResource {
                         message.getJsonObject("data").getLong("shiftId"),
                         message.getJsonObject("data").getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
             }
-        });
+        }
     }
 
     @GET
     @Path("orders")
-    public Uni<List<String>> getOrders() {
+    public List<String> getOrders() {
         return service.orders();
     }
 
     @GET
-    @Path("orders/{key}/operation")
+    @Path("operation/{key}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Uni<JsonObject> operation(@PathParam("key") String key) {
+    public JsonObject operation(@PathParam("key") String key) {
         return service.getOperation(key);
     }
 
     @GET
-    @Path("orders/{key}/order")
+    @Path("orders/{key}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Uni<JsonObject> order(@PathParam("key") String key) {
+    public JsonObject order(@PathParam("key") String key) {
         return service.getOrder(key);
     }
 
     @PUT
     @Path("orders/{key}")
     @Produces(MediaType.TEXT_PLAIN)
-    public Uni<String> receiptOrder(@PathParam("key") String key) {
-        JsonObject order = service.getOrder(key).await().indefinitely();
+    public String receiptOrder(@PathParam("key") String key) {
+        JsonObject order = service.getOrder(key);
         if (order.isEmpty()) {
             LOG.error("!!! re-processing order:{} not found", key);
             throw new NotFoundException("order not found");
         }
-        return service.getOperation(key).onItem().transform(oper -> {
-            if (oper.isEmpty()) {
-                LOG.warn("re-processing orderNumber:{} on not yet registered", order.getString("orderNumber"));
-                receiptSale(order);
-                return "re-processing not registered";
-            } else if (oper.getString("status").equalsIgnoreCase("ERROR")) {
-                LOG.warn("re-processing orderNumber:{} on error:{}", order.getString("orderNumber"),
-                        oper.getJsonObject("data").getJsonObject("error").getString("message"));
-                receiptSale(order);
-                return "re-processing on error";
-            } else {
-                LOG.error("!!! do not re-processing orderNumber:{}, status:{}", order.getString("orderNumber"),
-                        oper.getString("status"));
-                return "do not re-rocessing";
-            }
-        });
+        JsonObject oper = service.getOperation(key);
+        if (oper.isEmpty()) {
+            LOG.info("--> re-processing orderNumber:{} not registered yet", order.getString("orderNumber"));
+            receiptSale(order);
+            return "re-processing not registered order";
+        } else if (oper.getString("status").equalsIgnoreCase("ERROR")) {
+            LOG.warn("--> re-processing orderNumber:{} on error:{}", order.getString("orderNumber"),
+                    oper.getJsonObject("data").getJsonObject("error").getString("message"));
+            receiptSale(order);
+            return "re-processing error order";
+        } else {
+            // get dk operation status
+            return client.get("/api/operations/" + oper.getString("id")).expect(predicate)
+                    .putHeader("Authorization", "Bearer " + token).send().await().indefinitely().bodyAsJsonObject()
+                    .getString("status");
+        }
     }
 
     private Receipt buildReceipt(JsonObject message) {
