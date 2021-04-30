@@ -6,57 +6,56 @@ import java.util.List;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import io.quarkus.redis.client.RedisClient;
 import io.quarkus.redis.client.reactive.ReactiveRedisClient;
 import io.vertx.core.json.JsonObject;
+import io.vertx.mutiny.redis.client.Response;
 
 @Singleton
 public class AuditRepository {
 
     @Inject
-    RedisClient redisClient;
-
-    @Inject
-    ReactiveRedisClient redisClientAsynch;
+    ReactiveRedisClient redisClient;
 
     // Function<Response, Void> empty = response -> null;
 
     public void setOrder(JsonObject request) {
-        redisClientAsynch.hset(List.of(request.getString("mdOrder"), "order", request.encode())).subscribe().with(i -> {
+        redisClient.hset(List.of(request.getString("mdOrder"), "order", request.encode())).subscribe().with(i -> {
         });
-        redisClientAsynch.sadd(List.of("orders", request.getString("mdOrder"))).subscribe().with(i -> {
+        redisClient.sadd(List.of("orders", request.getString("mdOrder"))).subscribe().with(i -> {
         });
     }
 
     public void setOperation(JsonObject operation) {
         if (operation.getString("status").equalsIgnoreCase("SUCCESS")) {
-            redisClientAsynch.del(List.of(operation.getString("externalId"))).subscribe().with(i -> {
+            redisClient.del(List.of(operation.getString("externalId"))).subscribe().with(i -> {
             });
-            redisClientAsynch.srem(List.of("orders", operation.getString("externalId"))).subscribe().with(i -> {
+            redisClient.srem(List.of("orders", operation.getString("externalId"))).subscribe().with(i -> {
             });
         } else {
-            redisClientAsynch.hset(List.of(operation.getString("externalId"), "operation", operation.encode()))
-                    .subscribe().with(i -> {
+            redisClient.hset(List.of(operation.getString("externalId"), "operation", operation.encode())).subscribe()
+                    .with(i -> {
                     });
         }
     }
 
     public JsonObject getOperation(String key) {
-        var op = redisClient.hget(key, "operation");
+        var op = redisClient.hget(key, "operation").await().indefinitely();
         return op == null ? new JsonObject() : new JsonObject(op.toString());
     }
 
     public JsonObject getOrder(String key) {
-        var op = redisClient.hget(key, "order");
+        var op = redisClient.hget(key, "order").await().indefinitely();
         return op == null ? new JsonObject() : new JsonObject(op.toString());
     }
 
     public List<String> orders() {
-        List<String> result = new ArrayList<>();
-        redisClient.smembers("orders").forEach(response -> {
-            result.add(response.toString());
-        });
-        return result;
+        return redisClient.smembers("orders").map(response -> {
+            List<String> result = new ArrayList<>();
+            for (Response order : response) {
+                result.add(order.toString());
+            }
+            return result;
+        }).await().indefinitely();
     }
 
 }
