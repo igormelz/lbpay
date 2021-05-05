@@ -24,6 +24,8 @@ import api3.GetAccountResponse;
 import api3.GetExternAccount;
 import api3.GetExternAccountResponse;
 import api3.GetRecommendedPayment;
+import api3.SoapAccountFull;
+import api3.SoapAgreement;
 import api3.SoapPayment;
 import api3.SoapPaymentFull;
 import io.vertx.core.json.JsonObject;
@@ -71,25 +73,22 @@ public class SberOnlineResource {
     }
 
     private SberOnlineMessage processCheckAccount(String sessionId, String account) {
-        GetExternAccount acctRequest = new GetExternAccount();
-        acctRequest.setId(5);
-        acctRequest.setStr(account);
         try {
-            GetExternAccountResponse acctInfo = lbsoap.callService(acctRequest, sessionId).getJsonObject("data")
-                    .mapTo(GetExternAccountResponse.class);
-            if (acctInfo.getRet().get(0).getAgreements().stream().filter(ag -> ag.getNumber().equalsIgnoreCase(account))
-                    .filter(ag -> ag.getClosedon().isBlank()).findAny().isPresent()) {
-
-                // fill response
+            // find account by agrm_number
+            Optional<SoapAccountFull> acctInfo = lbsoap.findAccountByAgrmNum(sessionId, account);
+            // get agreement
+            Optional<SoapAgreement> agrm = acctInfo.get().getAgreements().stream()
+                    .filter(ag -> ag.getNumber().equalsIgnoreCase(account)).findFirst();
+            if (agrm.isPresent() && agrm.get().getClosedon().isBlank()) {
+                // fill success response
                 SberOnlineMessage answer = new SberOnlineMessage(SberOnlineCode.OK);
-                if (!acctInfo.getRet().get(0).getAddresses().isEmpty())
-                    answer.ADDRESS = acctInfo.getRet().get(0).getAddresses().get(0).getAddress();
-                answer.BALANCE = acctInfo.getRet().get(0).getAgreements().get(0).getBalance();
-                // get recomended payment
+                if (!acctInfo.get().getAddresses().isEmpty())
+                    answer.ADDRESS = acctInfo.get().getAddresses().get(0).getAddress();
+                answer.BALANCE = agrm.get().getBalance();
+                // get recomended payment by agrm_id
                 GetRecommendedPayment recPaymentReq = new GetRecommendedPayment();
-                recPaymentReq.setId(acctInfo.getRet().get(0).getAgreements().get(0).getAgrmid());
+                recPaymentReq.setId(agrm.get().getAgrmid());
                 answer.REC_SUM = lbsoap.callService(recPaymentReq, sessionId).getJsonObject("data").getDouble("ret");
-
                 // return response
                 LOG.info("<-- success check account: {}", account);
                 return answer;
@@ -99,7 +98,7 @@ public class SberOnlineResource {
             }
         } catch (RuntimeException e) {
             if (e.getMessage().contains("not found")) {
-                LOG.warn("<-- check account: {} not found", account);
+                LOG.warn("<-! check account: {} not found", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 e.printStackTrace();
@@ -202,11 +201,16 @@ public class SberOnlineResource {
         acctReq.setId(uid);
         GetAccountResponse acct = lbsoap.callService(acctReq, sessionId).getJsonObject("data")
                 .mapTo(GetAccountResponse.class);
-        bus.sendAndForget("receipt-sale",
-                new JsonObject().put("amount", amount).put("orderNumber", pay_id).put("account", account)
-                        .put("mdOrder", UUID.randomUUID().toString())
-                        .put("email", acct.getRet().get(0).getAccount().getEmail())
-                        .put("phone", acct.getRet().get(0).getAccount().getMobile()));
+        // build message
+        JsonObject message = new JsonObject()
+                .put("order",
+                        new JsonObject().put("amount", amount).put("orderNumber", pay_id).put("account", account)
+                                .put("mdOrder", UUID.randomUUID().toString())
+                                .put("email", acct.getRet().get(0).getAccount().getEmail())
+                                .put("phone", acct.getRet().get(0).getAccount().getMobile()))
+                .put("account", JsonObject.mapFrom(acct));
+        // notify receipt service
+        bus.sendAndForget("receipt-sale", message);
     }
 
     private static String toRegDate(String dateTime) {

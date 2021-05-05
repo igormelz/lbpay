@@ -79,37 +79,39 @@ public class DreamkasResource {
     @ConsumeEvent("receipt-sale")
     public void receiptSale(JsonObject message) {
         boolean isValid = false;
-
-        if (message.containsKey("email") && message.getString("email")
+        JsonObject order = message.getJsonObject("order");
+        if (order.containsKey("email") && order.getString("email")
                 .matches("^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$")) {
             isValid = true;
-        } else if (message.containsKey("phone") && message.getString("phone").matches("^\\+?[1-9]\\d{10,13}+$")) {
+        } else if (order.containsKey("phone") && order.getString("phone").matches("^\\+?[1-9]\\d{10,13}+$")) {
             isValid = true;
-            if (!message.getString("phone").startsWith("+"))
-                message.put("phone", "+" + message.getString("phone"));
+            if (!order.getString("phone").startsWith("+"))
+                order.put("phone", "+" + order.getString("phone"));
         }
 
         if (!isValid) {
             LOG.error("!!! receipt orderNumber: {} - no required email: {} or phone: {} in the account:{}",
-                    message.getString("orderNumber"), message.getString("email"), message.getString("phone"),
-                    message.getString("account"));
+                    order.getString("orderNumber"), order.getString("email"), order.getString("phone"),
+                    order.getString("account"));
+            service.publish(message.put("error", "no required email or phone"));
             return;
         }
 
         // create checkpoint
-        service.setOrder(message);
+        service.publish(message);
+        service.setOrder(order);
 
-        LOG.info("<-- receipt orderNumber: {}", message.getString("orderNumber"));
+        LOG.info("<-- receipt orderNumber: {}", order.getString("orderNumber"));
         client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
-                .sendJson(buildReceipt(message)).subscribe().with(response -> {
+                .sendJson(buildReceipt(order)).subscribe().with(response -> {
                     JsonObject operation = response.bodyAsJsonObject();
                     LOG.info("--> {} receipt orderNumber: {}, operation: {}",
-                            operation.getString("status").toLowerCase(), message.getString("orderNumber"),
+                            operation.getString("status").toLowerCase(), order.getString("orderNumber"),
                             operation.getString("id"));
                     // update checkpoint
                     service.setOperation(operation);
                 }, err -> {
-                    LOG.error("!!! receipt orderNumber: {} - {}", message.getString("orderNumber"), err.getMessage());
+                    LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"), err.getMessage());
                 });
     }
 
@@ -128,6 +130,7 @@ public class DreamkasResource {
                 if (data.getString("status").equalsIgnoreCase("ERROR")) {
                     LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"),
                             data.getJsonObject("data").getJsonObject("error").getString("message"));
+                    service.publish(data);
                 } else {
                     LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
                             order.getString("orderNumber"), data.getString("id"));

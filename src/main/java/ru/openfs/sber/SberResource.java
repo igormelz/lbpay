@@ -21,16 +21,9 @@ import org.slf4j.LoggerFactory;
 
 import api3.CancelPrePayment;
 import api3.ConfirmPrePayment;
-import api3.GetAccount;
-import api3.GetAccountResponse;
-import api3.GetAgreements;
-import api3.GetAgreementsBrief;
-import api3.GetAgreementsBriefResponse;
-import api3.GetAgreementsResponse;
 import api3.GetPrePayments;
 import api3.GetPrePaymentsResponse;
 import api3.InsPrePayment;
-import api3.SoapAgreement;
 import api3.SoapAgreementBrief;
 import api3.SoapFilter;
 import api3.SoapPrePayment;
@@ -85,7 +78,7 @@ public class SberResource {
 
     @GET
     @Path("checkout")
-    public Response validateAccount(@QueryParam("uid") String account) {
+    public Response checkAccount(@QueryParam("uid") String account) {
         if (account.matches(accountPattern)) {
             String sessionId = lbsoap.login();
             try {
@@ -105,23 +98,26 @@ public class SberResource {
     @Path("checkout")
     public Uni<Response> checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
         if (account.matches(accountPattern) && amount > 10 && amount < 20000) {
+            LOG.info("--> checkout account: {}, amount: {}", account, amount);
             String sessionId = lbsoap.login();
             if (sessionId == null)
                 return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
             try {
-                Optional<SoapAgreementBrief> agrm = findAgreementByNumber(sessionId, account);
+                Optional<SoapAgreementBrief> agrm = lbsoap.findAgreementByNumber(sessionId, account);
                 if (agrm.isPresent() && agrm.get().getClosedon().isBlank()) {
-                    long orderNumber = createOrderNumber(sessionId, agrm.get().getAgrmid(), amount);
-                    LOG.info("--> checkout orderNumber: {}, account: {}, amount: {}", orderNumber, account, amount);
+
+                    // create prepayment ordernumber
+                    long orderNumber = lbsoap.createOrderNumber(sessionId, agrm.get().getAgrmid(), amount);
+
+                    // call sberbank
                     return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
                         if (item.containsKey("formUrl") && item.containsKey("orderId")) {
-                            LOG.info("<-- success checkout orderNumber: {}, orderId: {}", orderNumber,
-                                    item.getString("orderId"));
+                            LOG.info("<-- success checkout orderNumber: {}, account: {}, amount: {}, mdOrder: {}",
+                                    orderNumber, account, amount, item.getString("orderId"));
                             return Response.seeOther(URI.create(item.getString("formUrl"))).build();
                         }
                         if (item.containsKey("errorCode")) {
-                            LOG.error("!!! orderNumber: {} checkout: {}", orderNumber,
-                                    item.getString("errorMessage"));
+                            LOG.error("!!! orderNumber: {} checkout: {}", orderNumber, item.getString("errorMessage"));
                         }
                         return Response.status(Status.BAD_REQUEST).build();
                     });
@@ -146,21 +142,39 @@ public class SberResource {
             return Response.serverError().build();
 
         boolean isSuccess = status == 1;
+
+        // process payment
         if (isSuccess && operation.equalsIgnoreCase("deposited")) {
             LOG.info("--> deposited orderNumber: {}", orderNumber);
             try {
-                findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
-                    if (order.getStatus() == 0) {
-                        doConfirmPrePayment(sessionId, orderNumber, order.getAmount(), mdOrder);
-                        findAgreementById(sessionId, order.getAgrmid()).ifPresent(account -> {
-                            LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}", orderNumber,
-                                    account.getNumber(), order.getAmount());
-                            doRegisterReceipt(sessionId, account.getUid(), orderNumber, account.getNumber(),
-                                    order.getAmount(), mdOrder);
-                        });
-                    } else {
-                        LOG.warn("<-- orderNumber: {} processed", orderNumber);
-                    }
+                lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
+
+                    if (order.getStatus() != 0)
+                        throw new RuntimeException("order was deposited at " + order.getPaydate());
+
+                    // process payment
+                    lbsoap.confirmPrePayment(sessionId, orderNumber, order.getAmount(), mdOrder);
+
+                    // find account
+                    lbsoap.findAccountByAgrmId(sessionId, order.getAgrmid()).ifPresent(acct -> {
+                        // get agreement
+                        acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
+                                .ifPresent(agrm -> {
+                                    LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}",
+                                            orderNumber, agrm.getNumber(), order.getAmount());
+                                    // build message
+                                    JsonObject message = new JsonObject()
+                                            .put("order",
+                                                    new JsonObject().put("amount", order.getAmount())
+                                                            .put("orderNumber", String.valueOf(orderNumber))
+                                                            .put("account", agrm.getNumber()).put("mdOrder", mdOrder)
+                                                            .put("email", acct.getAccount().getEmail())
+                                                            .put("phone", acct.getAccount().getMobile()))
+                                            .put("account", JsonObject.mapFrom(acct));
+                                    // notify receipt service
+                                    bus.sendAndForget("receipt-sale", message);
+                                });
+                    });
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
@@ -171,6 +185,7 @@ public class SberResource {
             }
         }
 
+        // process refund payment
         if (isSuccess && operation.equalsIgnoreCase("refunded")) {
             LOG.warn("--> refunded orderNumber: {}", orderNumber);
             return Response.ok().build();
@@ -181,24 +196,23 @@ public class SberResource {
             return Response.ok().build();
         }
 
+        // process unsuccess payment
         if (!isSuccess && operation.equalsIgnoreCase("deposited")) {
             LOG.info("--> unsuccess deposited orderNumber: {}", orderNumber);
             LOG.info("<-- orderNumber: {} waiting for success", orderNumber);
             return Response.ok().build();
         }
 
+        // process decline payment
         if (!isSuccess) {
             LOG.info("--> declined orderNumber: {} ({})", orderNumber, operation);
             try {
-                findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
-                    if (order.getStatus() == 0) {
-                        doCancelPrePayment(sessionId, orderNumber);
-                        LOG.info("<-- success declined orderNumber: {}", orderNumber);
-                        // ask and print reason
-                        bus.sendAndForget("sber-payment-info", orderNumber);
-                    } else {
-                        LOG.warn("<-- orderNumber: {} already processed at {}", orderNumber, order.getCanceldate());
-                    }
+                lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
+                    if (order.getStatus() != 0)
+                        throw new RuntimeException("order was declined at " + order.getCanceldate());
+                    lbsoap.cancelPrePayment(sessionId, orderNumber);
+                    LOG.info("<-- success declined orderNumber: {}", orderNumber);
+                    bus.sendAndForget("sber-payment-info", orderNumber);
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
@@ -231,79 +245,9 @@ public class SberResource {
         });
     }
 
-    private long createOrderNumber(String sessionId, long id, double amount) throws RuntimeException {
-        SoapPrePayment data = new SoapPrePayment();
-        data.setAgrmid(id);
-        data.setAmount(amount);
-        data.setCurname("RUR");
-        data.setComment("form checkout");
-        data.setPaydate(BILL_DATE_FMT.format(LocalDateTime.now()));
-        InsPrePayment request = new InsPrePayment();
-        request.setVal(data);
-        return lbsoap.callService(request, sessionId).getJsonObject("data").getLong("ret");
-    }
-
-    private void doConfirmPrePayment(String sessionId, long orderNumber, double amount, String receipt)
-            throws RuntimeException {
-        ConfirmPrePayment request = new ConfirmPrePayment();
-        request.setRecordid(orderNumber);
-        request.setAmount(amount);
-        request.setReceipt(receipt);
-        request.setPaydate(BILL_DATE_FMT.format(LocalDateTime.now()));
-        lbsoap.callService(request, sessionId);
-    }
-
-    private void doCancelPrePayment(String sessionId, long orderNumber) throws RuntimeException {
-        CancelPrePayment request = new CancelPrePayment();
-        request.setRecordid(orderNumber);
-        request.setCanceldate(BILL_DATE_FMT.format(LocalDateTime.now()));
-        lbsoap.callService(request, sessionId);
-    }
-
-    private Optional<SoapPrePayment> findOrderNumber(String sessionId, Long orderNumber) throws RuntimeException {
-        SoapFilter filter = new SoapFilter();
-        filter.setRecordid(orderNumber);
-        GetPrePayments request = new GetPrePayments();
-        request.setFlt(filter);
-        return lbsoap.callService(request, sessionId).getJsonObject("data").mapTo(GetPrePaymentsResponse.class).getRet()
-                .stream().findFirst();
-    }
-
-    private Optional<SoapAgreement> findAgreementById(String sessionId, long id) throws RuntimeException {
-        SoapFilter filter = new SoapFilter();
-        filter.setAgrmid(id);
-        GetAgreements request = new GetAgreements();
-        request.setFlt(filter);
-        return lbsoap.callService(request, sessionId).getJsonObject("data").mapTo(GetAgreementsResponse.class).getRet()
-                .stream().findFirst();
-    }
-
     private boolean isActiveAgreement(String sessionId, String number) throws RuntimeException {
-        var account = findAgreementByNumber(sessionId, number);
+        var account = lbsoap.findAgreementByNumber(sessionId, number);
         return account.isPresent() && account.get().getClosedon().isBlank();
-    }
-
-    private Optional<SoapAgreementBrief> findAgreementByNumber(String sessionId, String number)
-            throws RuntimeException {
-        SoapFilter filter = new SoapFilter();
-        filter.setAgrmnum(number);
-        GetAgreementsBrief request = new GetAgreementsBrief();
-        request.setFlt(filter);
-        return lbsoap.callService(request, sessionId).getJsonObject("data").mapTo(GetAgreementsBriefResponse.class)
-                .getRet().stream().filter(agrm -> agrm.getNumber().equalsIgnoreCase(number)).findFirst();
-    }
-
-    private void doRegisterReceipt(String sessionId, long uid, long orderNumber, String account, Double amount,
-            String mdOrder) {
-        GetAccount request = new GetAccount();
-        request.setId(uid);
-        GetAccountResponse acct = lbsoap.callService(request, sessionId).getJsonObject("data")
-                .mapTo(GetAccountResponse.class);
-        bus.sendAndForget("receipt-sale",
-                new JsonObject().put("amount", amount).put("orderNumber", String.valueOf(orderNumber))
-                        .put("account", account).put("mdOrder", mdOrder)
-                        .put("email", acct.getRet().get(0).getAccount().getEmail())
-                        .put("phone", acct.getRet().get(0).getAccount().getMobile()));
     }
 
     @ConsumeEvent("sber-payment-info")

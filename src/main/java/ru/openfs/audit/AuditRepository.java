@@ -16,7 +16,9 @@ public class AuditRepository {
     @Inject
     ReactiveRedisClient redisClient;
 
-    // Function<Response, Void> empty = response -> null;
+    public void publish(JsonObject msg) {
+        redisClient.publish("payment", msg.encode()).subscribe().with(i -> {});
+    }
 
     public void setOrder(JsonObject request) {
         redisClient.hset(List.of(request.getString("mdOrder"), "order", request.encode())).subscribe().with(i -> {
