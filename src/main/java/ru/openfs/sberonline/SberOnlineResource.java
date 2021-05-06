@@ -16,6 +16,7 @@ import javax.ws.rs.core.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import api3.Payment;
 import api3.SoapAccountFull;
 import api3.SoapAgreement;
 import io.vertx.core.json.JsonObject;
@@ -119,9 +120,20 @@ public class SberOnlineResource {
             SberOnlineMessage answer = new SberOnlineMessage(SberOnlineCode.OK);
             answer.EXT_ID = lbsoap.sberOnlinePayment(sessionId, pay_id, account, amount, payDateTime);
             answer.SUM = amount;
-            lbsoap.findPayment(sessionId, pay_id).ifPresent(p -> {
-                answer.REG_DATE = toRegDate(p.getPay().getLocaldate());
-                registerReceipt(sessionId, p.getUid(), amount, pay_id, account);
+            lbsoap.findPayment(sessionId, pay_id).ifPresent(payment -> {
+                answer.REG_DATE = toRegDate(payment.getPay().getLocaldate());
+                lbsoap.findAccountByAgrmNum(sessionId, account).ifPresent(acct -> {
+                    // build message
+                    JsonObject message = new JsonObject()
+                            .put("order",
+                                    new JsonObject().put("amount", amount).put("orderNumber", pay_id)
+                                            .put("account", account).put("mdOrder", UUID.randomUUID().toString())
+                                            .put("email", acct.getAccount().getEmail())
+                                            .put("phone", acct.getAccount().getMobile()))
+                            .put("account", JsonObject.mapFrom(acct));
+                    // notify receipt service
+                    bus.sendAndForget("receipt-sale", message);
+                });
             });
 
             // return response
@@ -148,20 +160,6 @@ public class SberOnlineResource {
         } finally {
             lbsoap.logout(sessionId);
         }
-    }
-
-    private void registerReceipt(String sessionId, long uid, double amount, String pay_id, String account)
-            throws RuntimeException {
-        lbsoap.findAccountByUid(sessionId, uid).ifPresentOrElse(acct -> {
-            // build message
-            JsonObject message = new JsonObject()
-                    .put("order", new JsonObject().put("amount", amount).put("orderNumber", pay_id)
-                            .put("account", account).put("mdOrder", UUID.randomUUID().toString())
-                            .put("email", acct.getAccount().getEmail()).put("phone", acct.getAccount().getMobile()))
-                    .put("account", JsonObject.mapFrom(acct));
-            // notify receipt service
-            bus.sendAndForget("receipt-sale", message);
-        }, () -> LOG.error("NOT FOUND UID:{}", uid));
     }
 
     private static String toRegDate(String dateTime) {

@@ -188,14 +188,6 @@ public class LbSoapService {
                 .stream().findFirst();
     }
 
-    public Optional<SoapAccountFull> findAccountByUid(String sessionId, long uid) throws RuntimeException {
-        GetExternAccount request = new GetExternAccount();
-        request.setId(UID);
-        request.setStr(Long.toString(uid));
-        return callService(request, sessionId).getJsonObject("data").mapTo(GetExternAccountResponse.class).getRet()
-                .stream().findFirst();
-    }
-
     protected JsonObject callService(Object request, String sessionId) throws RuntimeException {
         Set<String> cookie = sessionId != null ? Collections.singleton(sessionId) : Collections.emptySet();
         return client.post("/").expect(predicate).putHeader("Cookie", cookie)
