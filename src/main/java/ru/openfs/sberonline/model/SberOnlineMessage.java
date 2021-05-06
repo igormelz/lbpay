@@ -22,4 +22,9 @@ public class SberOnlineMessage {
         this.CODE = code.getCode();
         this.MESSAGE = code.getMsg();
     }
+
+    public void setResponse(SberOnlineCode code) {
+        this.CODE = code.getCode();
+        this.MESSAGE = code.getMsg();
+    }
 }

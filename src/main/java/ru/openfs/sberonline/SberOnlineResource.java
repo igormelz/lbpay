@@ -3,7 +3,6 @@ package ru.openfs.sberonline;
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Optional;
 import java.util.UUID;
 
 import javax.inject.Inject;
@@ -16,9 +15,6 @@ import javax.ws.rs.core.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import api3.Payment;
-import api3.SoapAccountFull;
-import api3.SoapAgreement;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import ru.openfs.lbsoap.LbSoapService;
@@ -50,46 +46,73 @@ public class SberOnlineResource {
 
         // connect to billing
         String sessionId = lbsoap.login();
-        if (sessionId == null)
+        if (sessionId == null) {
             return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
+        }
 
         if (action.equalsIgnoreCase("check")) {
+
+            // process check acount
             LOG.info("--> check account: {}", account);
             return processCheckAccount(sessionId, account);
+
         } else if (action.equalsIgnoreCase("payment")) {
+
+            // process payment
             LOG.info("--> payment orderNumber: {}, account: {}, amount: {}", pay_id, account, amount);
             return processPayment(sessionId, account, amount, pay_id, pay_date);
-        } else
+
+        } else {
+            // raise error
             return new SberOnlineMessage(SberOnlineCode.WRONG_ACTION);
+        }
     }
 
     private SberOnlineMessage processCheckAccount(String sessionId, String account) {
         try {
-            // find account by agrm_number
-            Optional<SoapAccountFull> acctInfo = lbsoap.findAccountByAgrmNum(sessionId, account);
-            // get agreement
-            Optional<SoapAgreement> agrm = acctInfo.get().getAgreements().stream()
-                    .filter(ag -> ag.getNumber().equalsIgnoreCase(account)).findFirst();
-            if (agrm.isPresent() && agrm.get().getClosedon().isBlank()) {
-                // fill success response
-                SberOnlineMessage answer = new SberOnlineMessage(SberOnlineCode.OK);
-                if (!acctInfo.get().getAddresses().isEmpty())
-                    answer.ADDRESS = acctInfo.get().getAddresses().get(0).getAddress();
-                answer.BALANCE = agrm.get().getBalance();
-                answer.REC_SUM = lbsoap.getRecomendedPayment(sessionId, agrm.get().getAgrmid());
-                // return response
-                LOG.info("<-- success check account: {}", account);
-                return answer;
-            } else {
-                LOG.warn("<-- check account: {} inactive", account);
-                return new SberOnlineMessage(SberOnlineCode.ACCOUNT_INACTIVE);
-            }
+
+            SberOnlineMessage answer = new SberOnlineMessage();
+
+            // find account by agreement number
+            // when not found will throw exception
+            lbsoap.findAccountByAgrmNum(sessionId, account).ifPresent(acctInfo -> {
+
+                // get active agreement
+                acctInfo.getAgreements().stream().filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
+                        .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresentOrElse(agrm -> {
+
+                            // add address
+                            if (!acctInfo.getAddresses().isEmpty()) {
+                                answer.ADDRESS = acctInfo.getAddresses().get(0).getAddress();
+                            }
+                            // add current balance
+                            answer.BALANCE = agrm.getBalance();
+
+                            // ask recomended payment
+                            answer.REC_SUM = lbsoap.getRecomendedPayment(sessionId, agrm.getAgrmid());
+
+                            // success response
+                            answer.setResponse(SberOnlineCode.OK);
+                            LOG.info("<-- success check account: {}", account);
+
+                        }, () -> {
+                            // process inactive agreement response
+                            answer.setResponse(SberOnlineCode.ACCOUNT_INACTIVE);
+                            LOG.warn("<-- check account: {} inactive", account);
+                        });
+            });
+
+            // return response
+            return answer;
+
         } catch (RuntimeException e) {
             if (e.getMessage().contains("not found")) {
+                // process if not found account
                 LOG.warn("<-! check account: {} not found", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
-                e.printStackTrace();
+                // common error
+                LOG.error("!!! check account: {} - {}", account, e.getMessage());
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {
