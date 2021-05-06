@@ -18,6 +18,9 @@ import org.slf4j.LoggerFactory;
 
 import api3.CancelPrePayment;
 import api3.ConfirmPrePayment;
+import api3.ExternCheckPayment;
+import api3.ExternCheckPaymentResponse;
+import api3.ExternPayment;
 import api3.GetAccount;
 import api3.GetAccountResponse;
 import api3.GetAgreementsBrief;
@@ -26,12 +29,15 @@ import api3.GetExternAccount;
 import api3.GetExternAccountResponse;
 import api3.GetPrePayments;
 import api3.GetPrePaymentsResponse;
+import api3.GetRecommendedPayment;
 import api3.InsPrePayment;
 import api3.Login;
 import api3.Logout;
 import api3.SoapAccountFull;
 import api3.SoapAgreementBrief;
 import api3.SoapFilter;
+import api3.SoapPayment;
+import api3.SoapPaymentFull;
 import api3.SoapPrePayment;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -87,6 +93,39 @@ public class LbSoapService {
         callService(new Logout(), sessionId);
     }
 
+    public Optional<SoapPaymentFull> findPayment(String sessionId, String pay_id) throws RuntimeException {
+        ExternCheckPayment checkReq = new ExternCheckPayment();
+        checkReq.setReceipt(pay_id);
+        return callService(checkReq, sessionId).getJsonObject("data").mapTo(ExternCheckPaymentResponse.class).getRet()
+                .stream().findFirst();
+    }
+
+    public long sberOnlinePayment(String sessionId, String receipt, String account, Double amount, String payDateTime)
+            throws RuntimeException {
+        SoapPayment payment = new SoapPayment();
+        payment.setPaydate(payDateTime);
+        payment.setAmount(amount);
+        payment.setComment("SberOnline");
+        payment.setModperson(0L);
+        payment.setCurrid(0L);
+        payment.setReceipt(receipt);
+        payment.setClassid(0L);
+        ExternPayment request = new ExternPayment();
+        request.setId(5);
+        request.setStr(account);
+        request.setVal(payment);
+        request.setOperid(0L);
+        request.setNotexists(1L);
+        return callService(request, sessionId).getJsonObject("data").getLong("ret");
+    }
+
+    // get recomended payment by agrm_id
+    public double getRecomendedPayment(String sessionId, long id) throws RuntimeException {
+        GetRecommendedPayment recPaymentReq = new GetRecommendedPayment();
+        recPaymentReq.setId(id);
+        return callService(recPaymentReq, sessionId).getJsonObject("data").getDouble("ret");
+    }
+
     public void cancelPrePayment(String sessionId, long orderNumber) throws RuntimeException {
         CancelPrePayment request = new CancelPrePayment();
         request.setRecordid(orderNumber);
@@ -94,7 +133,8 @@ public class LbSoapService {
         callService(request, sessionId);
     }
 
-    public void confirmPrePayment(String sessionId, long orderNumber, double amount, String receipt) throws RuntimeException {
+    public void confirmPrePayment(String sessionId, long orderNumber, double amount, String receipt)
+            throws RuntimeException {
         ConfirmPrePayment request = new ConfirmPrePayment();
         request.setRecordid(orderNumber);
         request.setAmount(amount);
@@ -135,7 +175,7 @@ public class LbSoapService {
     public Optional<SoapAccountFull> findAccountByAgrmId(String sessionId, long id) throws RuntimeException {
         GetExternAccount request = new GetExternAccount();
         request.setId(AGRM_ID);
-        request.setStr(String.valueOf(id));
+        request.setStr(Long.toString(id));
         return callService(request, sessionId).getJsonObject("data").mapTo(GetExternAccountResponse.class).getRet()
                 .stream().findFirst();
     }
@@ -148,7 +188,15 @@ public class LbSoapService {
                 .stream().findFirst();
     }
 
-    public JsonObject callService(Object request, String sessionId) throws RuntimeException {
+    public Optional<SoapAccountFull> findAccountByUid(String sessionId, long uid) throws RuntimeException {
+        GetExternAccount request = new GetExternAccount();
+        request.setId(UID);
+        request.setStr(Long.toString(uid));
+        return callService(request, sessionId).getJsonObject("data").mapTo(GetExternAccountResponse.class).getRet()
+                .stream().findFirst();
+    }
+
+    protected JsonObject callService(Object request, String sessionId) throws RuntimeException {
         Set<String> cookie = sessionId != null ? Collections.singleton(sessionId) : Collections.emptySet();
         return client.post("/").expect(predicate).putHeader("Cookie", cookie)
                 .putHeader("Content-type", "application/xml")

@@ -16,18 +16,8 @@ import javax.ws.rs.core.MediaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import api3.ExternCheckPayment;
-import api3.ExternCheckPaymentResponse;
-import api3.ExternPayment;
-import api3.GetAccount;
-import api3.GetAccountResponse;
-import api3.GetExternAccount;
-import api3.GetExternAccountResponse;
-import api3.GetRecommendedPayment;
 import api3.SoapAccountFull;
 import api3.SoapAgreement;
-import api3.SoapPayment;
-import api3.SoapPaymentFull;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import ru.openfs.lbsoap.LbSoapService;
@@ -85,10 +75,7 @@ public class SberOnlineResource {
                 if (!acctInfo.get().getAddresses().isEmpty())
                     answer.ADDRESS = acctInfo.get().getAddresses().get(0).getAddress();
                 answer.BALANCE = agrm.get().getBalance();
-                // get recomended payment by agrm_id
-                GetRecommendedPayment recPaymentReq = new GetRecommendedPayment();
-                recPaymentReq.setId(agrm.get().getAgrmid());
-                answer.REC_SUM = lbsoap.callService(recPaymentReq, sessionId).getJsonObject("data").getDouble("ret");
+                answer.REC_SUM = lbsoap.getRecomendedPayment(sessionId, agrm.get().getAgrmid());
                 // return response
                 LOG.info("<-- success check account: {}", account);
                 return answer;
@@ -130,10 +117,9 @@ public class SberOnlineResource {
         try {
             // do payment
             SberOnlineMessage answer = new SberOnlineMessage(SberOnlineCode.OK);
-            answer.EXT_ID = lbsoap.callService(paymentRequest(pay_id, account, amount, payDateTime), sessionId)
-                    .getJsonObject("data").getLong("ret");
+            answer.EXT_ID = lbsoap.sberOnlinePayment(sessionId, pay_id, account, amount, payDateTime);
             answer.SUM = amount;
-            findPayment(sessionId, pay_id).ifPresent(p -> {
+            lbsoap.findPayment(sessionId, pay_id).ifPresent(p -> {
                 answer.REG_DATE = toRegDate(p.getPay().getLocaldate());
                 registerReceipt(sessionId, p.getUid(), amount, pay_id, account);
             });
@@ -149,7 +135,7 @@ public class SberOnlineResource {
             } else if (e.getMessage().contains("already exists")) {
                 LOG.warn("<-- payment orderNumber: {} has already processed", pay_id);
                 SberOnlineMessage answer = new SberOnlineMessage(SberOnlineCode.PAY_TRX_DUPLICATE);
-                findPayment(sessionId, pay_id).ifPresent(p -> {
+                lbsoap.findPayment(sessionId, pay_id).ifPresent(p -> {
                     answer.AMOUNT = p.getAmountcurr();
                     answer.REG_DATE = toRegDate(p.getPay().getLocaldate());
                     answer.EXT_ID = p.getPay().getRecordid();
@@ -164,53 +150,18 @@ public class SberOnlineResource {
         }
     }
 
-    private Optional<SoapPaymentFull> findPayment(String sessionId, String pay_id) {
-        try {
-            ExternCheckPayment checkReq = new ExternCheckPayment();
-            checkReq.setReceipt(pay_id);
-            return lbsoap.callService(checkReq, sessionId).getJsonObject("data").mapTo(ExternCheckPaymentResponse.class)
-                    .getRet().stream().findFirst();
-        } catch (RuntimeException e) {
-            LOG.error("!!! find payment orderNumber: {} return error: {}", pay_id, e.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    private ExternPayment paymentRequest(String pay_id, String account, Double amount, String payDateTime)
-            throws RuntimeException {
-        SoapPayment payment = new SoapPayment();
-        payment.setPaydate(payDateTime);
-        payment.setAmount(amount);
-        payment.setComment("SberOnline");
-        payment.setModperson(0L);
-        payment.setCurrid(0L);
-        payment.setReceipt(pay_id);
-        payment.setClassid(0L);
-        ExternPayment paymentReq = new ExternPayment();
-        paymentReq.setId(5);
-        paymentReq.setStr(account);
-        paymentReq.setVal(payment);
-        paymentReq.setOperid(0L);
-        paymentReq.setNotexists(1L);
-        return paymentReq;
-    }
-
     private void registerReceipt(String sessionId, long uid, double amount, String pay_id, String account)
             throws RuntimeException {
-        GetAccount acctReq = new GetAccount();
-        acctReq.setId(uid);
-        GetAccountResponse acct = lbsoap.callService(acctReq, sessionId).getJsonObject("data")
-                .mapTo(GetAccountResponse.class);
-        // build message
-        JsonObject message = new JsonObject()
-                .put("order",
-                        new JsonObject().put("amount", amount).put("orderNumber", pay_id).put("account", account)
-                                .put("mdOrder", UUID.randomUUID().toString())
-                                .put("email", acct.getRet().get(0).getAccount().getEmail())
-                                .put("phone", acct.getRet().get(0).getAccount().getMobile()))
-                .put("account", JsonObject.mapFrom(acct));
-        // notify receipt service
-        bus.sendAndForget("receipt-sale", message);
+        lbsoap.findAccountByUid(sessionId, uid).ifPresentOrElse(acct -> {
+            // build message
+            JsonObject message = new JsonObject()
+                    .put("order", new JsonObject().put("amount", amount).put("orderNumber", pay_id)
+                            .put("account", account).put("mdOrder", UUID.randomUUID().toString())
+                            .put("email", acct.getAccount().getEmail()).put("phone", acct.getAccount().getMobile()))
+                    .put("account", JsonObject.mapFrom(acct));
+            // notify receipt service
+            bus.sendAndForget("receipt-sale", message);
+        }, () -> LOG.error("NOT FOUND UID:{}", uid));
     }
 
     private static String toRegDate(String dateTime) {
