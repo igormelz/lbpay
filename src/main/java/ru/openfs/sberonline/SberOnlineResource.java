@@ -79,7 +79,7 @@ public class SberOnlineResource {
 
                 // get active agreement
                 acctInfo.getAgreements().stream().filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
-                        .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresentOrElse(agrm -> {
+                        .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresent(agrm -> {
 
                             // add address
                             if (!acctInfo.getAddresses().isEmpty()) {
@@ -95,24 +95,27 @@ public class SberOnlineResource {
                             answer.setResponse(SberOnlineCode.OK);
                             LOG.info("<-- success check account: {}", account);
 
-                        }, () -> {
-                            // process inactive agreement response
-                            answer.setResponse(SberOnlineCode.ACCOUNT_INACTIVE);
-                            LOG.warn("<-- check account: {} inactive", account);
                         });
+
+                // process inactive agreement response
+                if (answer.MESSAGE == null) {
+                    answer.setResponse(SberOnlineCode.ACCOUNT_INACTIVE);
+                    LOG.warn("<-- check account: {} inactive", account);
+                }
             });
 
             // return response
             return answer;
 
         } catch (RuntimeException e) {
-            if (e.getMessage().contains("not found")) {
+            if (e.getMessage() != null && e.getMessage().contains("not found")) {
                 // process if not found account
                 LOG.warn("<-! check account: {} not found", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 // common error
-                LOG.error("!!! check account: {} - {}", account, e.getMessage());
+                e.printStackTrace();
+                // LOG.error("!!! check account: {} - {}", account, e.getMessage());
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {

@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -21,8 +22,6 @@ import api3.ConfirmPrePayment;
 import api3.ExternCheckPayment;
 import api3.ExternCheckPaymentResponse;
 import api3.ExternPayment;
-import api3.GetAccount;
-import api3.GetAccountResponse;
 import api3.GetAgreementsBrief;
 import api3.GetAgreementsBriefResponse;
 import api3.GetExternAccount;
@@ -91,6 +90,15 @@ public class LbSoapService {
 
     public void logout(String sessionId) {
         callService(new Logout(), sessionId);
+    }
+
+    public boolean isActiveAgreement(String sessionId, String number) throws RuntimeException {
+        return findAgreementByNumber(sessionId, number).filter(agrm -> agrm.getClosedon().isBlank()).isPresent();
+    }
+
+    public long getAgreementId(String sessionId, String number) throws RuntimeException {
+        return findAgreementByNumber(sessionId, number).filter(agrm -> agrm.getClosedon().isBlank())
+                .map(agrm -> agrm.getAgrmid()).orElse(0L);
     }
 
     public Optional<SoapPaymentFull> findPayment(String sessionId, String pay_id) throws RuntimeException {
@@ -195,13 +203,12 @@ public class LbSoapService {
                 .sendBuffer(Buffer.buffer(producer.requestBody("direct:marshalSoap", request, byte[].class))).onItem()
                 .transform(response -> {
                     JsonObject json = response.headers().contains("Set-Cookie")
-                            ? new JsonObject().put("sessionId",
-                                    response.getHeader("Set-Cookie").replaceFirst("(sessnum=\\w+);.*", "$1"))
+                            ? new JsonObject().put("sessionId", parseSessionId(response.cookies()))
                             : new JsonObject();
                     json.put("data", JsonObject
                             .mapFrom(producer.requestBody("direct:unmarshalSoap", response.bodyAsBuffer().getBytes())));
                     return json;
-                }).await().atMost(Duration.ofSeconds(3));
+                }).await().atMost(Duration.ofSeconds(1));
     }
 
     ErrorConverter converter = ErrorConverter.createFullBody(result -> {
@@ -213,5 +220,10 @@ public class LbSoapService {
     });
 
     ResponsePredicate predicate = ResponsePredicate.create(ResponsePredicate.SC_SUCCESS, converter);
+
+    private String parseSessionId(List<String> cookie) {
+        return cookie.stream().filter(c -> c.startsWith("sessnum") && c.contains("Max-Age")).findAny()
+                .map(c -> c.substring(0, c.indexOf(";"))).orElse(null);
+    }
 
 }

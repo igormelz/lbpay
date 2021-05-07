@@ -1,9 +1,6 @@
 package ru.openfs.sber;
 
 import java.net.URI;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Optional;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
@@ -19,14 +16,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import api3.CancelPrePayment;
-import api3.ConfirmPrePayment;
-import api3.GetPrePayments;
-import api3.GetPrePaymentsResponse;
-import api3.InsPrePayment;
-import api3.SoapAgreementBrief;
-import api3.SoapFilter;
-import api3.SoapPrePayment;
 import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
@@ -40,7 +29,6 @@ import ru.openfs.lbsoap.LbSoapService;
 @Path("/pay")
 public class SberResource {
     private static final Logger LOG = LoggerFactory.getLogger(SberResource.class);
-    private static final DateTimeFormatter BILL_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private WebClient client;
 
     @ConfigProperty(name = "sber.host", defaultValue = "3dsec.sberbank.ru")
@@ -82,7 +70,7 @@ public class SberResource {
         if (account.matches(accountPattern)) {
             String sessionId = lbsoap.login();
             try {
-                if (sessionId != null && isActiveAgreement(sessionId, account))
+                if (sessionId != null && lbsoap.isActiveAgreement(sessionId, account))
                     return Response.noContent().build();
             } catch (RuntimeException e) {
                 LOG.error("!!! check account: {}", e.getMessage());
@@ -98,16 +86,19 @@ public class SberResource {
     @Path("checkout")
     public Uni<Response> checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
         if (account.matches(accountPattern) && amount > 10 && amount < 20000) {
-            LOG.info("--> checkout account: {}, amount: {}", account, amount);
-            String sessionId = lbsoap.login();
-            if (sessionId == null)
-                return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
-            try {
-                Optional<SoapAgreementBrief> agrm = lbsoap.findAgreementByNumber(sessionId, account);
-                if (agrm.isPresent() && agrm.get().getClosedon().isBlank()) {
 
+            // connect billing
+            String sessionId = lbsoap.login();
+            if (sessionId == null) {
+                return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
+            }
+
+            try {
+                // get active agreement id
+                long agrmId = lbsoap.getAgreementId(sessionId, account);
+                if (agrmId != 0) {
                     // create prepayment ordernumber
-                    long orderNumber = lbsoap.createOrderNumber(sessionId, agrm.get().getAgrmid(), amount);
+                    long orderNumber = lbsoap.createOrderNumber(sessionId, agrmId, amount);
 
                     // call sberbank
                     return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
@@ -243,11 +234,6 @@ public class SberResource {
         return client.post("/payment/rest/register.do").sendForm(form).onItem().transform(response -> {
             return response.bodyAsJsonObject();
         });
-    }
-
-    private boolean isActiveAgreement(String sessionId, String number) throws RuntimeException {
-        var account = lbsoap.findAgreementByNumber(sessionId, number);
-        return account.isPresent() && account.get().getClosedon().isBlank();
     }
 
     @ConsumeEvent("sber-payment-info")
