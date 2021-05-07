@@ -125,7 +125,8 @@ public class SberResource {
 
     @GET
     @Path("sber/callback")
-    public Response callback(@QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
+    public Response callback(
+            @QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
             @QueryParam("operation") String operation, @QueryParam("status") int status) {
 
         String sessionId = lbsoap.login();
@@ -149,7 +150,8 @@ public class SberResource {
                     // find account
                     lbsoap.findAccountByAgrmId(sessionId, order.getAgrmid()).ifPresent(acct -> {
                         // get agreement
-                        acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
+                        acct.getAgreements().stream()
+                                .filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
                                 .ifPresent(agrm -> {
                                     LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}",
                                             orderNumber, agrm.getNumber(), order.getAmount());
@@ -222,8 +224,8 @@ public class SberResource {
         MultiMap form = MultiMap.caseInsensitiveMultiMap();
         form.set("userName", userName);
         form.set("password", userPass);
-        form.set("orderNumber", String.valueOf(orderNumber));
-        form.set("amount", String.valueOf((long) (amount * 100)));
+        form.set("orderNumber", Long.toString(orderNumber));
+        form.set("amount", Long.toString((long) (amount * 100)));
         form.set("returnUrl", successUrl);
         form.set("failUrl", failUrl);
         form.set("description", account);
@@ -231,9 +233,8 @@ public class SberResource {
         form.set("language", "ru");
         form.set("pageView", "DESKTOP");
         form.set("sessionTimeoutSecs", "300");
-        return client.post("/payment/rest/register.do").sendForm(form).onItem().transform(response -> {
-            return response.bodyAsJsonObject();
-        });
+        return client.post("/payment/rest/register.do").sendForm(form).onItem()
+                .transform(response -> response.bodyAsJsonObject());
     }
 
     @ConsumeEvent("sber-payment-info")
@@ -248,7 +249,7 @@ public class SberResource {
                 LOG.warn("!!! orderNumber: {} {}", orderNumber, json.getString("errorMessage"));
             } else {
                 LOG.info("--> orderNumber: {}, account: {}, amount: {}, reason: {} ({})", orderNumber,
-                        json.getString("orderDescription"), json.getLong("amount") / 100,
+                        json.getString("orderDescription"), json.getDouble("amount") / 100,
                         json.getString("actionCodeDescription"), json.getLong("actionCode"));
             }
         });

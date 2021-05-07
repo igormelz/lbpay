@@ -34,7 +34,8 @@ public class SberOnlineResource {
 
     @GET
     @Produces(MediaType.APPLICATION_XML)
-    public SberOnlineMessage process(@QueryParam("ACTION") String action, @QueryParam("ACCOUNT") String account,
+    public SberOnlineMessage process(
+            @QueryParam("ACTION") String action, @QueryParam("ACCOUNT") String account,
             @QueryParam("AMOUNT") double amount, @QueryParam("PAY_ID") String pay_id,
             @QueryParam("PAY_DATE") String pay_date) {
 
@@ -50,36 +51,32 @@ public class SberOnlineResource {
             return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
         }
 
+        // process check acount
         if (action.equalsIgnoreCase("check")) {
-
-            // process check acount
             LOG.info("--> check account: {}", account);
             return processCheckAccount(sessionId, account);
+        }
 
-        } else if (action.equalsIgnoreCase("payment")) {
-
-            // process payment
+        // process payment
+        if (action.equalsIgnoreCase("payment")) {
             LOG.info("--> payment orderNumber: {}, account: {}, amount: {}", pay_id, account, amount);
             return processPayment(sessionId, account, amount, pay_id, pay_date);
-
-        } else {
-            // raise error
-            return new SberOnlineMessage(SberOnlineCode.WRONG_ACTION);
         }
+
+        // raise error
+        return new SberOnlineMessage(SberOnlineCode.WRONG_ACTION);
     }
 
     private SberOnlineMessage processCheckAccount(String sessionId, String account) {
+        SberOnlineMessage answer = new SberOnlineMessage();
         try {
-
-            SberOnlineMessage answer = new SberOnlineMessage();
-
-            // find account by agreement number
-            // when not found will throw exception
+            // find account by agreement number when not found will throw exception
             lbsoap.findAccountByAgrmNum(sessionId, account).ifPresent(acctInfo -> {
 
                 // get active agreement
-                acctInfo.getAgreements().stream().filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
-                        .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresent(agrm -> {
+                acctInfo.getAgreements().stream()
+                    .filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
+                    .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresent(agrm -> {
 
                             // add address
                             if (!acctInfo.getAddresses().isEmpty()) {
@@ -109,13 +106,12 @@ public class SberOnlineResource {
 
         } catch (RuntimeException e) {
             if (e.getMessage() != null && e.getMessage().contains("not found")) {
-                // process if not found account
+                // raise not found account
                 LOG.warn("<-! check account: {} not found", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 // common error
                 e.printStackTrace();
-                // LOG.error("!!! check account: {} - {}", account, e.getMessage());
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {
@@ -123,7 +119,8 @@ public class SberOnlineResource {
         }
     }
 
-    private SberOnlineMessage processPayment(String sessionId, String account, Double amount, String pay_id,
+    private SberOnlineMessage processPayment(
+            String sessionId, String account, Double amount, String pay_id,
             String pay_date) {
 
         // parse payDate

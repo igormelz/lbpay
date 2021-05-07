@@ -11,7 +11,8 @@ public class LbSoapTransform extends RouteBuilder {
 
     @Override
     public void configure() throws Exception {
-        SoapJaxbDataFormat soap = new SoapJaxbDataFormat("api3",
+        SoapJaxbDataFormat soap = new SoapJaxbDataFormat(
+                "api3",
                 new ServiceInterfaceStrategy(api3.Api3PortType.class, true));
 
         // marshal object to soap
@@ -23,5 +24,5 @@ public class LbSoapTransform extends RouteBuilder {
         // process fault
         from("direct:getFaultMessage").id("GetFaultMessage").transform(xpath("//detail/text()", String.class));
     }
-    
+
 }

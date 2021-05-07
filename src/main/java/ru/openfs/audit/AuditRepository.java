@@ -17,7 +17,8 @@ public class AuditRepository {
     ReactiveRedisClient redisClient;
 
     public void publish(JsonObject msg) {
-        redisClient.publish("payment", msg.encode()).subscribe().with(i -> {});
+        redisClient.publish("payment", msg.encode()).subscribe().with(i -> {
+        });
     }
 
     public void setOrder(JsonObject request) {
