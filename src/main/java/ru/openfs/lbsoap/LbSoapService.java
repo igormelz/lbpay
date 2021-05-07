@@ -51,7 +51,6 @@ import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
 public class LbSoapService {
     private static final Logger LOG = LoggerFactory.getLogger(LbSoapService.class);
     public static final Long AGRM_NUM = 5L;
-    public static final Long UID = 10L;
     public static final Long AGRM_ID = 11L;
     private static final DateTimeFormatter BILL_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private WebClient client;
