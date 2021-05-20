@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
+import ru.openfs.audit.AuditRepository;
 import ru.openfs.lbsoap.LbSoapService;
 import ru.openfs.sberonline.model.SberOnlineCode;
 import ru.openfs.sberonline.model.SberOnlineMessage;
@@ -26,11 +27,15 @@ public class SberOnlineResource {
     private static final Logger LOG = LoggerFactory.getLogger(SberOnlineResource.class);
     private static final DateTimeFormatter PAY_DATE_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy_HH:mm:ss");
     private static final DateTimeFormatter BILL_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    
     @Inject
     EventBus bus;
 
     @Inject
     LbSoapService lbsoap;
+
+    @Inject
+    AuditRepository audit;
 
     @GET
     @Produces(MediaType.APPLICATION_XML)
@@ -111,7 +116,8 @@ public class SberOnlineResource {
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 // common error
-                e.printStackTrace();
+                LOG.error("!!! check account: {} {}", account, e.getMessage());
+                audit.publish(new JsonObject().put("error", e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {
@@ -153,7 +159,7 @@ public class SberOnlineResource {
                                             .put("account", account).put("mdOrder", UUID.randomUUID().toString())
                                             .put("email", acct.getAccount().getEmail())
                                             .put("phone", acct.getAccount().getMobile()))
-                            .put("account", JsonObject.mapFrom(acct));
+                            .put("account", JsonObject.mapFrom(acct.getAccount()));
                     // notify receipt service
                     bus.sendAndForget("receipt-sale", message);
                 });

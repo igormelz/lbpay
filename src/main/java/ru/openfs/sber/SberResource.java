@@ -24,11 +24,13 @@ import io.vertx.mutiny.core.MultiMap;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.ext.web.client.WebClient;
+import ru.openfs.audit.AuditRepository;
 import ru.openfs.lbsoap.LbSoapService;
 
 @Path("/pay")
 public class SberResource {
     private static final Logger LOG = LoggerFactory.getLogger(SberResource.class);
+
     private WebClient client;
 
     @ConfigProperty(name = "sber.host", defaultValue = "3dsec.sberbank.ru")
@@ -51,6 +53,9 @@ public class SberResource {
 
     @Inject
     LbSoapService lbsoap;
+
+    @Inject 
+    AuditRepository audit;
 
     @Inject
     EventBus bus;
@@ -109,6 +114,7 @@ public class SberResource {
                         }
                         if (item.containsKey("errorCode")) {
                             LOG.error("!!! orderNumber: {} checkout: {}", orderNumber, item.getString("errorMessage"));
+                            audit.publish(new JsonObject().put("error", item.getString("errorMessage")));
                         }
                         return Response.status(Status.BAD_REQUEST).build();
                     });
@@ -163,7 +169,8 @@ public class SberResource {
                                                             .put("account", agrm.getNumber()).put("mdOrder", mdOrder)
                                                             .put("email", acct.getAccount().getEmail())
                                                             .put("phone", acct.getAccount().getMobile()))
-                                            .put("account", JsonObject.mapFrom(acct));
+                                            .put("account", JsonObject.mapFrom(acct.getAccount()))
+                                            .put("agreement", JsonObject.mapFrom(agrm));
                                     // notify receipt service
                                     bus.sendAndForget("receipt-sale", message);
                                 });
@@ -172,6 +179,7 @@ public class SberResource {
                 return Response.ok().build();
             } catch (RuntimeException e) {
                 LOG.error("!!! orderNumber: {} deposited: {}", orderNumber, e.getMessage());
+                audit.publish(new JsonObject().put("error", e.getMessage()));
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -210,6 +218,7 @@ public class SberResource {
                 return Response.ok().build();
             } catch (RuntimeException e) {
                 LOG.error("!!! orderNumber: {} declined: {}", orderNumber, e.getMessage());
+                audit.publish(new JsonObject().put("error", e.getMessage()));
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -247,6 +256,7 @@ public class SberResource {
             JsonObject json = response.bodyAsJsonObject();
             if (!json.getString("errorCode").equalsIgnoreCase("0")) {
                 LOG.warn("!!! orderNumber: {} {}", orderNumber, json.getString("errorMessage"));
+                audit.publish(new JsonObject().put("error", json.getString("errorMessage")));
             } else {
                 LOG.info("--> orderNumber: {}, account: {}, amount: {}, reason: {} ({})", orderNumber,
                         json.getString("orderDescription"), json.getDouble("amount") / 100,

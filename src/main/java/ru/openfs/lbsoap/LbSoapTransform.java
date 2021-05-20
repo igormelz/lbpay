@@ -1,12 +1,12 @@
 package ru.openfs.lbsoap;
 
-import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Singleton;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.dataformat.soap.SoapJaxbDataFormat;
 import org.apache.camel.dataformat.soap.name.ServiceInterfaceStrategy;
 
-@ApplicationScoped
+@Singleton
 public class LbSoapTransform extends RouteBuilder {
 
     @Override

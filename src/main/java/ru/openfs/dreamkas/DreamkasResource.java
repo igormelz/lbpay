@@ -112,6 +112,7 @@ public class DreamkasResource {
                     service.setOperation(operation);
                 }, err -> {
                     LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"), err.getMessage());
+                    service.publish(message.put("error", err.getMessage()));
                 });
     }
 
