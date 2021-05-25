@@ -77,9 +77,8 @@ public class DreamkasResource {
     ResponsePredicate predicate = ResponsePredicate.create(ResponsePredicate.SC_SUCCESS, converter);
 
     @ConsumeEvent("receipt-sale")
-    public void receiptSale(JsonObject message) {
+    public void receiptSale(JsonObject order) {
         boolean isValid = false;
-        JsonObject order = message.getJsonObject("order");
         if (order.containsKey("email") && order.getString("email")
                 .matches("^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$")) {
             isValid = true;
@@ -93,12 +92,10 @@ public class DreamkasResource {
             LOG.error("!!! receipt orderNumber: {} - no required email: {} or phone: {} in the account:{}",
                     order.getString("orderNumber"), order.getString("email"), order.getString("phone"),
                     order.getString("account"));
-            service.publish(message.put("error", "no required email or phone"));
+            service.publishError(order.put("errorCode", 100).put("errorMessage", "no required email or phone"));
             return;
         }
 
-        // create checkpoint
-        service.publish(message);
         service.setOrder(order);
 
         LOG.info("<-- receipt orderNumber: {}", order.getString("orderNumber"));
@@ -112,7 +109,7 @@ public class DreamkasResource {
                     service.setOperation(operation);
                 }, err -> {
                     LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"), err.getMessage());
-                    service.publish(message.put("error", err.getMessage()));
+                    service.publishError(order.put("errorCode", 101).put("errorMessage", err.getMessage()));
                 });
     }
 
@@ -131,7 +128,7 @@ public class DreamkasResource {
                 if (data.getString("status").equalsIgnoreCase("ERROR")) {
                     LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"),
                             data.getJsonObject("data").getJsonObject("error").getString("message"));
-                    service.publish(data);
+                    service.publishReceipt(data);
                 } else {
                     LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
                             order.getString("orderNumber"), data.getString("id"));
