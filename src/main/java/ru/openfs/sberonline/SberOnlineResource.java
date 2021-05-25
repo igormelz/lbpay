@@ -117,7 +117,7 @@ public class SberOnlineResource {
             } else {
                 // common error
                 LOG.error("!!! check account: {} {}", account, e.getMessage());
-                audit.publish(new JsonObject().put("error", e.getMessage()));
+                audit.publishError(new JsonObject().put("error", e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {

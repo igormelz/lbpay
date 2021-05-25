@@ -16,8 +16,30 @@ public class AuditRepository {
     @Inject
     ReactiveRedisClient redisClient;
 
-    public void publish(JsonObject msg) {
-        redisClient.publish("payment", msg.encode()).subscribe().with(i -> {
+    /**
+     * publish error 
+     * @param error JsonObject
+     */
+    public void publishError(JsonObject error) {
+        redisClient.publish("error", error.encode()).subscribe().with(i -> {
+        });
+    }
+
+    /**
+     * publish payment 
+     * @param payment JsonObject
+     */
+    public void publishPayment(JsonObject payment) {
+        redisClient.publish("payment", payment.encode()).subscribe().with(i -> {
+        });
+    }
+
+    /**
+     * publish receipt event 
+     * @param event JsonObject
+     */
+    public void publishReceipt(JsonObject event) {
+        redisClient.publish("receipt", event.encode()).subscribe().with(i -> {
         });
     }
 
