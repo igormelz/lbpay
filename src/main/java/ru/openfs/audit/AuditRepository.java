@@ -1,86 +1,60 @@
 package ru.openfs.audit;
 
-import java.util.ArrayList;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
-import javax.inject.Singleton;
 
-import io.quarkus.redis.client.reactive.ReactiveRedisClient;
+import org.apache.camel.ProducerTemplate;
+
+import io.quarkus.hibernate.orm.panache.PanacheRepository;
+import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
-import io.vertx.mutiny.redis.client.Response;
 
-@Singleton
-public class AuditRepository {
+@ApplicationScoped
+public class AuditRepository implements PanacheRepository<Operation> {
 
     @Inject
-    ReactiveRedisClient redisClient;
+    ProducerTemplate producer;
 
-    /**
-     * publish error 
-     * @param error JsonObject
-     */
-    public void publishError(JsonObject error) {
-        redisClient.publish("error", error.encode()).subscribe().with(i -> {
-        });
+    @ConsumeEvent("notify-bot")
+    public void notifyBot(JsonObject msgObject) {
+        producer.sendBody("direct:sendMessage", msgObject.encode());
     }
 
-    /**
-     * publish payment 
-     * @param payment JsonObject
-     */
-    public void publishPayment(JsonObject payment) {
-        redisClient.publish("payment", payment.encode()).subscribe().with(i -> {
-        });
+    public void setOrder(JsonObject order) {
+        Operation entity = order.mapTo(Operation.class);
+        entity.createAt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").format(LocalDateTime.now());
+        persist(entity);
     }
 
-    /**
-     * publish receipt event 
-     * @param event JsonObject
-     */
-    public void publishReceipt(JsonObject event) {
-        redisClient.publish("receipt", event.encode()).subscribe().with(i -> {
-        });
-    }
-
-    public void setOrder(JsonObject request) {
-        redisClient.hset(List.of(request.getString("mdOrder"), "order", request.encode())).subscribe().with(i -> {
-        });
-        redisClient.sadd(List.of("orders", request.getString("mdOrder"))).subscribe().with(i -> {
-        });
+    public JsonObject getOrder(String key) {
+        Operation op = find("mdOrder", key).firstResult();
+        return op == null ? new JsonObject() : JsonObject.mapFrom(op);
     }
 
     public void setOperation(JsonObject operation) {
         if (operation.getString("status").equalsIgnoreCase("SUCCESS")) {
-            redisClient.del(List.of(operation.getString("externalId"))).subscribe().with(i -> {
-            });
-            redisClient.srem(List.of("orders", operation.getString("externalId"))).subscribe().with(i -> {
-            });
+            delete("mdOrder", operation.getString("externalId"));
         } else {
-            redisClient.hset(List.of(operation.getString("externalId"), "operation", operation.encode())).subscribe()
-                    .with(i -> {
-                    });
+            update("operId = ?1, status = ?2 where mdOrder = ?3", operation.getString("id"), operation.getString("status"),
+                    operation.getString("externalId"));
         }
     }
 
-    public JsonObject getOperation(String key) {
-        var op = redisClient.hget(key, "operation").await().indefinitely();
-        return op == null ? new JsonObject() : new JsonObject(op.toString());
-    }
+    // public void setFd(JsonObject fd) {
+    //     redisClient.hset(List.of("doc." + fd.getString("fiscalDocumentNumber"), "fd", fd.encode()));
+    // }
 
-    public JsonObject getOrder(String key) {
-        var op = redisClient.hget(key, "order").await().indefinitely();
-        return op == null ? new JsonObject() : new JsonObject(op.toString());
-    }
+    // public JsonObject getOperation(String key) {
+    //     var op = redisClient.hget(ReceiptKey(key), "operation");
+    //     return op == null ? new JsonObject() : new JsonObject(op.toString());
+    // }
 
-    public List<String> orders() {
-        return redisClient.smembers("orders").map(response -> {
-            List<String> result = new ArrayList<>();
-            for (Response order : response) {
-                result.add(order.toString());
-            }
-            return result;
-        }).await().indefinitely();
+    public List<Operation> orders() {
+        return listAll();
     }
 
 }

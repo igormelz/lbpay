@@ -4,6 +4,7 @@ import java.net.URI;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
+import javax.transaction.Transactional;
 import javax.ws.rs.FormParam;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -114,7 +115,7 @@ public class SberResource {
                         }
                         if (item.containsKey("errorCode")) {
                             LOG.error("!!! orderNumber: {} checkout: {}", orderNumber, item.getString("errorMessage"));
-                            audit.publishError(new JsonObject().put("errorCode", 102).put("errorMessage",
+                            bus.send("notify-bot", new JsonObject().put("errorCode", 102).put("errorMessage",
                                     item.getString("errorMessage")));
                         }
                         return Response.status(Status.BAD_REQUEST).build();
@@ -132,7 +133,9 @@ public class SberResource {
 
     @GET
     @Path("sber/callback")
-    public Response callback(@QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
+    @Transactional
+    public Response callback(
+            @QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
             @QueryParam("operation") String operation, @QueryParam("status") int status) {
 
         String sessionId = lbsoap.login();
@@ -161,25 +164,24 @@ public class SberResource {
                                     LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}",
                                             orderNumber, agrm.getNumber(), order.getAmount());
                                     // build message
-                                    JsonObject receiptRequest = new JsonObject().put("amount", order.getAmount())
+                                    JsonObject receipt = new JsonObject()
+                                            .put("amount", order.getAmount())
                                             .put("orderNumber", String.valueOf(orderNumber))
-                                            .put("account", agrm.getNumber()).put("mdOrder", mdOrder)
+                                            .put("account", agrm.getNumber())
+                                            .put("mdOrder", mdOrder)
                                             .put("email", acct.getAccount().getEmail())
                                             .put("phone", acct.getAccount().getMobile());
-                                    bus.sendAndForget("receipt-sale", receiptRequest);
-                                    // validate address
-                                    String address = acct.getAddresses().isEmpty() ? "not defined"
-                                            : acct.getAddresses().get(0).getAddress();
-                                    audit.publishPayment(
-                                            receiptRequest.put("address", address).put("balance", agrm.getBalance())
-                                                    .put("name", acct.getAccount().getName()));
+                                    // make checkpoint 
+                                    audit.setOrder(receipt);
+                                    // notify ofd
+                                    bus.send("receipt-sale", receipt);
                                 });
                     });
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
                 LOG.error("!!! orderNumber: {} deposited: {}", orderNumber, e.getMessage());
-                audit.publishError(new JsonObject().put("errorCode", 103).put("errorMessage", e.getMessage()));
+                bus.send("notify-bot", new JsonObject().put("errorCode", 103).put("errorMessage", e.getMessage()));
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -213,12 +215,12 @@ public class SberResource {
                         throw new RuntimeException("order was declined at " + order.getCanceldate());
                     lbsoap.cancelPrePayment(sessionId, orderNumber);
                     LOG.info("<-- success declined orderNumber: {}", orderNumber);
-                    bus.sendAndForget("sber-payment-info", orderNumber);
+                    bus.send("sber-payment-info", orderNumber);
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
                 LOG.error("!!! orderNumber: {} declined: {}", orderNumber, e.getMessage());
-                audit.publishError(new JsonObject().put("error", e.getMessage()));
+                bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -256,7 +258,7 @@ public class SberResource {
             JsonObject json = response.bodyAsJsonObject();
             if (!json.getString("errorCode").equalsIgnoreCase("0")) {
                 LOG.warn("!!! orderNumber: {} {}", orderNumber, json.getString("errorMessage"));
-                audit.publishError(new JsonObject().put("error", json.getString("errorMessage")));
+                bus.send("notify-bot", new JsonObject().put("error", json.getString("errorMessage")));
             } else {
                 LOG.info("--> orderNumber: {}, account: {}, amount: {}, reason: {} ({})", orderNumber,
                         json.getString("orderDescription"), json.getDouble("amount") / 100,

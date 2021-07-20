@@ -4,6 +4,7 @@ import java.util.List;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
+import javax.transaction.Transactional;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
@@ -23,11 +24,13 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.buffer.Buffer;
+import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
 import ru.openfs.audit.AuditRepository;
+import ru.openfs.audit.Operation;
 import ru.openfs.dreamkas.model.Receipt;
 
 @Path("/pay/dreamkas")
@@ -57,6 +60,9 @@ public class DreamkasResource {
     @Inject
     Vertx vertx;
 
+    @Inject
+    EventBus bus;
+
     @PostConstruct
     void initialize() {
         this.client = WebClient.create(vertx,
@@ -77,95 +83,84 @@ public class DreamkasResource {
     ResponsePredicate predicate = ResponsePredicate.create(ResponsePredicate.SC_SUCCESS, converter);
 
     @ConsumeEvent("receipt-sale")
-    public void receiptSale(JsonObject order) {
+    public void receiptSale(JsonObject receipt) {
         boolean isValid = false;
-        if (order.containsKey("email") && order.getString("email")
+        if (receipt.containsKey("email") && receipt.getString("email")
                 .matches("^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$")) {
             isValid = true;
-        } else if (order.containsKey("phone") && order.getString("phone").matches("^\\+?[1-9]\\d{10,13}+$")) {
+        } else if (receipt.containsKey("phone") && receipt.getString("phone").matches("^\\+?[1-9]\\d{10,13}+$")) {
             isValid = true;
-            if (!order.getString("phone").startsWith("+"))
-                order.put("phone", "+" + order.getString("phone"));
+            if (!receipt.getString("phone").startsWith("+"))
+                receipt.put("phone", "+" + receipt.getString("phone"));
         }
 
         if (!isValid) {
-            LOG.error("!!! receipt orderNumber: {} - no required email: {} or phone: {} in the account:{}",
-                    order.getString("orderNumber"), order.getString("email"), order.getString("phone"),
-                    order.getString("account"));
-            service.publishError(order.put("errorCode", 100).put("errorMessage", "no required email or phone"));
+            LOG.error("!!! receipt orderNumber: {} - no required email: {} or phone: {}",
+                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone"));
+            bus.send("notify-bot", receipt.put("errorMessage", "no required email or phone"));
             return;
         }
 
-        service.setOrder(order);
-
-        LOG.info("<-- receipt orderNumber: {}", order.getString("orderNumber"));
+        LOG.info("<-- receipt orderNumber: {}", receipt.getString("orderNumber"));
         client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
-                .sendJson(buildReceipt(order)).subscribe().with(response -> {
+                .sendJson(buildReceipt(receipt)).subscribe().with(response -> {
                     JsonObject operation = response.bodyAsJsonObject();
                     LOG.info("--> {} receipt orderNumber: {}, operation: {}",
-                            operation.getString("status").toLowerCase(), order.getString("orderNumber"),
+                            operation.getString("status").toLowerCase(), receipt.getString("orderNumber"),
                             operation.getString("id"));
-                    // update checkpoint
-                    service.setOperation(operation);
                 }, err -> {
-                    LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"), err.getMessage());
-                    service.publishError(order.put("errorCode", 101).put("errorMessage", err.getMessage()));
+                    LOG.error("!!! receipt orderNumber: {} - {}", receipt.getString("orderNumber"), err.getMessage());
+                    bus.send("notify-bot", receipt.put("errorMessage", err.getMessage()));
                 });
     }
 
     @POST
+    @Transactional
     @Consumes(MediaType.APPLICATION_JSON)
     public void webhook(JsonObject message) {
         JsonObject data = message.getJsonObject("data");
-        if (!data.containsKey("externalId")) {
-            LOG.warn(data.encodePrettily());
-            return;
-        }
 
-        JsonObject order = service.getOrder(data.getString("externalId"));
-        if (!order.isEmpty()) {
-            if (message.getString("type").equalsIgnoreCase("OPERATION")) {
-                if (data.getString("status").equalsIgnoreCase("ERROR")) {
-                    LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"),
-                            data.getJsonObject("data").getJsonObject("error").getString("message"));
-                    service.publishReceipt(data);
-                } else {
-                    LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
-                            order.getString("orderNumber"), data.getString("id"));
-                }
-                service.setOperation(data);
+        if (message.getString("type").equalsIgnoreCase("OPERATION")) {
+            JsonObject order = service.getOrder(data.getString("externalId"));
+            if (order.isEmpty()) {
+                LOG.error("!!! not found order by externalId: {}", data.getString("externalId"));
+                LOG.error("hook:", data.encodePrettily());
+                return;
             }
 
-            if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
-                LOG.info("--> ofd receipt orderNumber: {}, shift: {}, doc: {}", order.getString("orderNumber"),
-                        message.getJsonObject("data").getLong("shiftId"),
-                        message.getJsonObject("data").getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
+            if (data.getString("status").equalsIgnoreCase("ERROR")) {
+                LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"),
+                        data.getJsonObject("data").getJsonObject("error").getString("message"));
+                bus.send("notify-bot", data.put("orderNumber", order.getString("orderNumber")));
+            } else {
+                LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
+                        order.getString("orderNumber"), data.getString("id"));
             }
+            service.setOperation(data);
+
+        } else if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
+            LOG.info("--> ofd receipt shift: {}, doc: {}",
+                    data.getLong("shiftId"),
+                    data.getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
+            //service.setFd(data);
         }
     }
 
     @GET
-    @Path("orders")
-    public List<String> getOrders() {
+    @Path("order")
+    public List<Operation> getOrders() {
         return service.orders();
     }
 
     @GET
-    @Path("operation/{key}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public JsonObject operation(@PathParam("key") String key) {
-        return service.getOperation(key);
-    }
-
-    @GET
-    @Path("orders/{key}")
+    @Path("order/{key}")
     @Produces(MediaType.APPLICATION_JSON)
     public JsonObject order(@PathParam("key") String key) {
         return service.getOrder(key);
     }
 
     @PUT
-    @Path("orders/{key}")
+    @Path("order/{key}")
     @Produces(MediaType.TEXT_PLAIN)
     public String receiptOrder(@PathParam("key") String key) {
         JsonObject order = service.getOrder(key);
@@ -173,19 +168,17 @@ public class DreamkasResource {
             LOG.error("!!! re-processing order:{} not found", key);
             throw new NotFoundException("order not found");
         }
-        JsonObject oper = service.getOperation(key);
-        if (oper.isEmpty()) {
+        if (order.getString("operId") == null) {
             LOG.info("--> re-processing orderNumber:{} not registered yet", order.getString("orderNumber"));
             receiptSale(order);
             return "re-processing not registered order";
-        } else if (oper.getString("status").equalsIgnoreCase("ERROR")) {
-            LOG.warn("--> re-processing orderNumber:{} on error:{}", order.getString("orderNumber"),
-                    oper.getJsonObject("data").getJsonObject("error").getString("message"));
+        } else if (order.getString("status").equalsIgnoreCase("ERROR")) {
+            LOG.warn("--> re-processing orderNumber:{} on error", order.getString("orderNumber"));
             receiptSale(order);
             return "re-processing error order";
         } else {
             // get dk operation status
-            return client.get("/api/operations/" + oper.getString("id")).expect(predicate)
+            return client.get("/api/operations/" + order.getString("operId")).expect(predicate)
                     .putHeader("Authorization", "Bearer " + token).send().await().indefinitely().bodyAsJsonObject()
                     .getString("status");
         }

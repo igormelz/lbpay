@@ -1,6 +1,5 @@
 package ru.openfs.lbsoap;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
@@ -207,7 +206,7 @@ public class LbSoapService {
                     json.put("data", JsonObject
                             .mapFrom(producer.requestBody("direct:unmarshalSoap", response.bodyAsBuffer().getBytes())));
                     return json;
-                }).await().atMost(Duration.ofSeconds(1));
+                }).await().indefinitely(); //.atMost(Duration.ofSeconds(1));
     }
 
     ErrorConverter converter = ErrorConverter.createFullBody(result -> {

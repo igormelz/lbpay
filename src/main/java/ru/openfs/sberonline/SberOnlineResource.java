@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 import javax.inject.Inject;
+import javax.transaction.Transactional;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
@@ -27,7 +28,7 @@ public class SberOnlineResource {
     private static final Logger LOG = LoggerFactory.getLogger(SberOnlineResource.class);
     private static final DateTimeFormatter PAY_DATE_FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy_HH:mm:ss");
     private static final DateTimeFormatter BILL_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    
+
     @Inject
     EventBus bus;
 
@@ -39,6 +40,7 @@ public class SberOnlineResource {
 
     @GET
     @Produces(MediaType.APPLICATION_XML)
+    @Transactional
     public SberOnlineMessage process(
             @QueryParam("ACTION") String action, @QueryParam("ACCOUNT") String account,
             @QueryParam("AMOUNT") double amount, @QueryParam("PAY_ID") String pay_id,
@@ -80,8 +82,8 @@ public class SberOnlineResource {
 
                 // get active agreement
                 acctInfo.getAgreements().stream()
-                    .filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
-                    .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresent(agrm -> {
+                        .filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
+                        .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresent(agrm -> {
 
                             // add address
                             if (!acctInfo.getAddresses().isEmpty()) {
@@ -117,7 +119,7 @@ public class SberOnlineResource {
             } else {
                 // common error
                 LOG.error("!!! check account: {} {}", account, e.getMessage());
-                audit.publishError(new JsonObject().put("error", e.getMessage()));
+                bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {
@@ -153,15 +155,17 @@ public class SberOnlineResource {
                 answer.REG_DATE = toRegDate(payment.getPay().getLocaldate());
                 lbsoap.findAccountByAgrmNum(sessionId, account).ifPresent(acct -> {
                     // build message
-                    JsonObject message = new JsonObject()
-                            .put("order",
-                                    new JsonObject().put("amount", amount).put("orderNumber", pay_id)
-                                            .put("account", account).put("mdOrder", UUID.randomUUID().toString())
-                                            .put("email", acct.getAccount().getEmail())
-                                            .put("phone", acct.getAccount().getMobile()))
-                            .put("account", JsonObject.mapFrom(acct.getAccount()));
+                    JsonObject receipt = new JsonObject()
+                            .put("amount", amount)
+                            .put("orderNumber", pay_id)
+                            .put("account", account)
+                            .put("mdOrder", UUID.randomUUID().toString())
+                            .put("email", acct.getAccount().getEmail())
+                            .put("phone", acct.getAccount().getMobile());
+                    // make audit check point
+                    audit.setOrder(receipt);
                     // notify receipt service
-                    bus.sendAndForget("receipt-sale", message);
+                    bus.send("receipt-sale", receipt);
                 });
             });
 
@@ -183,7 +187,8 @@ public class SberOnlineResource {
                 });
                 return answer;
             } else {
-                e.printStackTrace();
+                LOG.error("!!! orderNumber:{} - {}", pay_id, e.getMessage());
+                bus.send("notify-bot", new JsonObject().put("orderNumber", pay_id).put("errorMessage", e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {
