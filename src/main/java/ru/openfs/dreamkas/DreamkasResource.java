@@ -20,6 +20,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.quarkus.vertx.ConsumeEvent;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.mutiny.core.Vertx;
@@ -30,7 +32,6 @@ import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
 import ru.openfs.audit.AuditRepository;
-import ru.openfs.audit.Operation;
 import ru.openfs.dreamkas.model.Receipt;
 
 @Path("/pay/dreamkas")
@@ -55,7 +56,7 @@ public class DreamkasResource {
     int deviceId;
 
     @Inject
-    AuditRepository service;
+    AuditRepository audit;
 
     @Inject
     Vertx vertx;
@@ -121,10 +122,9 @@ public class DreamkasResource {
         JsonObject data = message.getJsonObject("data");
 
         if (message.getString("type").equalsIgnoreCase("OPERATION")) {
-            JsonObject order = service.getOrder(data.getString("externalId"));
-            if (order.isEmpty()) {
+            JsonObject order = audit.getOrder(data.getString("externalId")).await().indefinitely();
+            if (order == null) {
                 LOG.error("!!! not found order by externalId: {}", data.getString("externalId"));
-                LOG.error("hook:", data.encodePrettily());
                 return;
             }
 
@@ -136,34 +136,34 @@ public class DreamkasResource {
                 LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
                         order.getString("orderNumber"), data.getString("id"));
             }
-            service.setOperation(data);
+            audit.processOperation(data);
 
         } else if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
             LOG.info("--> ofd receipt shift: {}, doc: {}",
                     data.getLong("shiftId"),
                     data.getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
-            //service.setFd(data);
+            //audit.setFd(data);
         }
     }
 
     @GET
     @Path("order")
-    public List<Operation> getOrders() {
-        return service.orders();
+    public Multi<JsonObject> getOrders() {
+        return audit.orders();
     }
 
     @GET
     @Path("order/{key}")
     @Produces(MediaType.APPLICATION_JSON)
-    public JsonObject order(@PathParam("key") String key) {
-        return service.getOrder(key);
+    public Uni<JsonObject> order(@PathParam("key") String key) {
+        return audit.getOrder(key);
     }
 
     @PUT
     @Path("order/{key}")
     @Produces(MediaType.TEXT_PLAIN)
-    public String receiptOrder(@PathParam("key") String key) {
-        JsonObject order = service.getOrder(key);
+    public Uni<String> receiptOrder(@PathParam("key") String key) {
+        JsonObject order = audit.getOrder(key).await().indefinitely();
         if (order.isEmpty()) {
             LOG.error("!!! re-processing order:{} not found", key);
             throw new NotFoundException("order not found");
@@ -171,16 +171,18 @@ public class DreamkasResource {
         if (order.getString("operId") == null) {
             LOG.info("--> re-processing orderNumber:{} not registered yet", order.getString("orderNumber"));
             receiptSale(order);
-            return "re-processing not registered order";
+            return Uni.createFrom().item("re-processing not registered order");
         } else if (order.getString("status").equalsIgnoreCase("ERROR")) {
             LOG.warn("--> re-processing orderNumber:{} on error", order.getString("orderNumber"));
             receiptSale(order);
-            return "re-processing error order";
+            return Uni.createFrom().item("re-processing error order");
         } else {
-            // get dk operation status
             return client.get("/api/operations/" + order.getString("operId")).expect(predicate)
-                    .putHeader("Authorization", "Bearer " + token).send().await().indefinitely().bodyAsJsonObject()
-                    .getString("status");
+                    .putHeader("Authorization", "Bearer " + token).send().onItem().transform(resp -> resp.bodyAsString())
+                    .onFailure().recoverWithItem(fail -> {
+                        LOG.error(fail.getMessage());
+                        return fail.getMessage();
+                    });
         }
     }
 

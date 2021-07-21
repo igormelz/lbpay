@@ -2,6 +2,9 @@ package ru.openfs.sberonline.model;
 
 import javax.xml.bind.annotation.XmlRootElement;
 
+import io.quarkus.runtime.annotations.RegisterForReflection;
+
+@RegisterForReflection
 @XmlRootElement(name = "RESPONSE")
 public class SberOnlineMessage {
     public int CODE;
