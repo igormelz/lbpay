@@ -1,7 +1,5 @@
 package ru.openfs.dreamkas;
 
-import java.util.List;
-
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.transaction.Transactional;
@@ -22,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.mutiny.core.Vertx;
@@ -31,13 +30,12 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
+import ru.openfs.audit.AuditRecord;
 import ru.openfs.audit.AuditRepository;
-import ru.openfs.dreamkas.model.Receipt;
 
 @Path("/pay/dreamkas")
 public class DreamkasResource {
     private static final Logger LOG = LoggerFactory.getLogger(DreamkasResource.class);
-    private static final String SERVICE_NAME = "Оплата услуг";
     private WebClient client;
 
     @ConfigProperty(name = "dreamkas.host", defaultValue = "kabinet.dreamkas.ru")
@@ -77,7 +75,7 @@ public class DreamkasResource {
             LOG.error(err);
             return new RuntimeException(err);
         }
-        LOG.error(result.message());
+        LOG.error("!!! DK service error:{}", result.message());
         return new RuntimeException(result.message());
     });
 
@@ -104,11 +102,12 @@ public class DreamkasResource {
 
         LOG.info("<-- receipt orderNumber: {}", receipt.getString("orderNumber"));
         client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
-                .sendJson(buildReceipt(receipt)).subscribe().with(response -> {
+                .sendJson(createReceipt(receipt)).subscribe().with(response -> {
                     JsonObject operation = response.bodyAsJsonObject();
                     LOG.info("--> {} receipt orderNumber: {}, operation: {}",
                             operation.getString("status").toLowerCase(), receipt.getString("orderNumber"),
                             operation.getString("id"));
+                    audit.setOperation(operation);
                 }, err -> {
                     LOG.error("!!! receipt orderNumber: {} - {}", receipt.getString("orderNumber"), err.getMessage());
                     bus.send("notify-bot", receipt.put("errorMessage", err.getMessage()));
@@ -122,19 +121,19 @@ public class DreamkasResource {
         JsonObject data = message.getJsonObject("data");
 
         if (message.getString("type").equalsIgnoreCase("OPERATION")) {
-            JsonObject order = audit.getOrder(data.getString("externalId")).await().indefinitely();
+            AuditRecord order = audit.findById(data.getString("externalId")).await().indefinitely();
             if (order == null) {
                 LOG.error("!!! not found order by externalId: {}", data.getString("externalId"));
                 return;
             }
 
             if (data.getString("status").equalsIgnoreCase("ERROR")) {
-                LOG.error("!!! receipt orderNumber: {} - {}", order.getString("orderNumber"),
+                LOG.error("!!! receipt orderNumber: {} - {}", order.orderNumber,
                         data.getJsonObject("data").getJsonObject("error").getString("message"));
-                bus.send("notify-bot", data.put("orderNumber", order.getString("orderNumber")));
+                bus.send("notify-bot", data.put("orderNumber", order.orderNumber));
             } else {
                 LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
-                        order.getString("orderNumber"), data.getString("id"));
+                        order.orderNumber, data.getString("id"));
             }
             audit.processOperation(data);
 
@@ -148,78 +147,74 @@ public class DreamkasResource {
 
     @GET
     @Path("order")
-    public Multi<JsonObject> getOrders() {
-        return audit.orders();
+    public Multi<AuditRecord> getOrders() {
+        return audit.findAll();
     }
 
     @GET
     @Path("order/{key}")
     @Produces(MediaType.APPLICATION_JSON)
-    public Uni<JsonObject> order(@PathParam("key") String key) {
-        return audit.getOrder(key);
+    public Uni<AuditRecord> order(@PathParam("key") String key) {
+        return audit.findById(key);
     }
 
     @PUT
     @Path("order/{key}")
     @Produces(MediaType.TEXT_PLAIN)
     public Uni<String> receiptOrder(@PathParam("key") String key) {
-        JsonObject order = audit.getOrder(key).await().indefinitely();
-        if (order.isEmpty()) {
+        AuditRecord order = audit.findById(key).await().indefinitely();
+        if (order == null) {
             LOG.error("!!! re-processing order:{} not found", key);
             throw new NotFoundException("order not found");
         }
-        if (order.getString("operId") == null) {
-            LOG.info("--> re-processing orderNumber:{} not registered yet", order.getString("orderNumber"));
-            receiptSale(order);
+        if (order.operId == null) {
+            LOG.info("--> re-processing orderNumber: {} with status: not registered", order.orderNumber);
+            receiptSale(JsonObject.mapFrom(order));
             return Uni.createFrom().item("re-processing not registered order");
-        } else if (order.getString("status").equalsIgnoreCase("ERROR")) {
-            LOG.warn("--> re-processing orderNumber:{} on error", order.getString("orderNumber"));
-            receiptSale(order);
+        } else if (order.status.equalsIgnoreCase("ERROR")) {
+            LOG.warn("--> re-processing orderNumber: {} with status: error", order.orderNumber);
+            receiptSale(JsonObject.mapFrom(order));
             return Uni.createFrom().item("re-processing error order");
         } else {
-            return client.get("/api/operations/" + order.getString("operId")).expect(predicate)
+            LOG.info("--> ask operation status");
+            return client.get("/api/operations/" + order.operId).expect(predicate)
                     .putHeader("Authorization", "Bearer " + token).send().onItem().transform(resp -> resp.bodyAsString())
-                    .onFailure().recoverWithItem(fail -> {
-                        LOG.error(fail.getMessage());
-                        return fail.getMessage();
-                    });
+                    .onFailure().recoverWithItem("DK service error");
         }
     }
 
-    private Receipt buildReceipt(JsonObject message) {
+    private JsonObject createReceipt(JsonObject receipt) {
         // calc service price
-        long price = (long) (message.getDouble("amount") * 100);
-
-        // build new Receipt
-        Receipt receipt = new Receipt();
-        receipt.deviceId = deviceId;
-        receipt.externalId = message.getString("mdOrder");
-
-        // add attributes
-        receipt.attributes = new Receipt.Attributes();
-        if (message.containsKey("email")) {
-            receipt.attributes.email = message.getString("email");
-        }
-        if (message.containsKey("phone")) {
-            receipt.attributes.phone = message.getString("phone");
-        }
-
-        // add position
-        var position = new Receipt.Position();
-        position.name = SERVICE_NAME;
-        position.price = price;
-        position.priceSum = price;
-        receipt.positions = List.of(position);
-
-        // add payment
-        var payment = new Receipt.Payment();
-        payment.sum = price;
-        receipt.payments = List.of(payment);
-
-        // add total
-        receipt.total = new Receipt.Total();
-        receipt.total.priceSum = price;
-
-        return receipt;
+        long price = (long) (receipt.getDouble("amount") * 100);
+        // {
+        // "externalId":"18e3e142-2f88-7a6d-ad98-56c501fa9b79",
+        // "deviceId":109266,
+        // "type":"SALE",
+        // "timeout":5,
+        // "taxMode":"SIMPLE_WO",
+        // "positions":[{"name":"Оплата услуг","type":"SERVICE","quantity":1,"price":55000,"priceSum":55000,"tax":"NDS_NO_TAX","taxSum":0}],
+        // "payments":[{"sum":55000,"type":"CASHLESS"}],
+        // "attributes":{"email":"Dmi7rich9407@gmail.com","phone":"+79650902202"},
+        // "total":{"priceSum":55000}}
+        return new JsonObject()
+                .put("externalId", receipt.getString("mdOrder"))
+                .put("deviceId", deviceId)
+                .put("type", "SALE")
+                .put("timeout", 5)
+                .put("taxMode", "SIMPLE_WO")
+                .put("positions", new JsonArray()
+                        .add(new JsonObject()
+                                .put("name", "Оплата услуг")
+                                .put("type", "SERVICE")
+                                .put("quantity", 1)
+                                .put("price", price)
+                                .put("priceSum", price)
+                                .put("tax", "NDS_NO_TAX")
+                                .put("taxSum", 0)))
+                .put("payments", new JsonArray().add(new JsonObject().put("sum", price).put("type", "CASHLESS")))
+                .put("attributes",
+                        new JsonObject().put("email", receipt.getString("email")).put("phone", receipt.getString("phone")))
+                .put("total", new JsonObject().put("priceSum", price));
     }
+
 }

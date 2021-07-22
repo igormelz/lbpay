@@ -11,6 +11,7 @@ import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
+import io.vertx.mutiny.sqlclient.Row;
 import io.vertx.mutiny.sqlclient.Tuple;
 
 @ApplicationScoped
@@ -62,13 +63,13 @@ public class AuditRepository {
                 .await().indefinitely();
     }
 
-    public Uni<JsonObject> getOrder(String key) {
+    public Uni<AuditRecord> findById(String key) {
         return client
                 .preparedQuery(
-                        "SELECT mdOrder, orderNumber, account, amount, email, phone FROM ReceiptOperation WHERE mdOrder = ?")
+                        "SELECT * FROM ReceiptOperation WHERE mdOrder = ?")
                 .execute(Tuple.of(key))
                 .onItem().transform(set -> set.iterator())
-                .onItem().transform(iterator -> iterator.hasNext() ? iterator.next().toJson() : null);
+                .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null);
     }
 
     public void setOperation(JsonObject operation) {
@@ -80,7 +81,7 @@ public class AuditRepository {
 
     public void processOperation(JsonObject operation) {
         if (operation.getString("status").equalsIgnoreCase("SUCCESS")) {
-            client.preparedQuery("DELETE ReceiptOperation WHERE mdOrder = ?")
+            client.preparedQuery("DELETE FROM ReceiptOperation WHERE mdOrder = ?")
                     .execute(Tuple.of(operation.getString("externalId"))).await().indefinitely();
         } else {
             client.preparedQuery("UPDATE ReceiptOperation SET operId = ?, status = ? WHERE mdOrder = ?")
@@ -90,20 +91,16 @@ public class AuditRepository {
         }
     }
 
-    // public void setFd(JsonObject fd) {
-    //     redisClient.hset(List.of("doc." + fd.getString("fiscalDocumentNumber"), "fd", fd.encode()));
-    // }
-
-    // public JsonObject getOperation(String key) {
-    //     var op = redisClient.hget(ReceiptKey(key), "operation");
-    //     return op == null ? new JsonObject() : new JsonObject(op.toString());
-    // }
-
-    public Multi<JsonObject> orders() {
-        return client.preparedQuery(
-                "SELECT mdOrder,orderNumber,account,amount,email,phone,createAt,operId,status FROM ReceiptOperation")
-                .execute().onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
-                .onItem().transform(r -> r.toJson());
+    public Multi<AuditRecord> findAll() {
+        return client.preparedQuery("SELECT * FROM ReceiptOperation").execute()
+                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                .onItem().transform(AuditRepository::from);
     }
 
+    private static AuditRecord from(Row row) {
+        return new AuditRecord(
+                row.getString("mdOrder"), row.getString("orderNumber"), row.getString("account"), row.getDouble("amount"),
+                row.getString("phone"), row.getString("email"), row.getLocalDateTime("createAt"), row.getString("operId"),
+                row.getString("status"));
+    }
 }
