@@ -155,6 +155,7 @@ public class LbSoapService {
         data.setAmount(amount);
         data.setCurname("RUR");
         data.setComment("form checkout");
+        data.setPaydate(BILL_DATE_FMT.format(LocalDateTime.now()));
         InsPrePayment request = new InsPrePayment();
         request.setVal(data);
         return callService(request, sessionId).getJsonObject("data").getLong("ret");
