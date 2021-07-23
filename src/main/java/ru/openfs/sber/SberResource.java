@@ -73,7 +73,7 @@ public class SberResource {
     @GET
     @Path("checkout")
     public Response checkAccount(@QueryParam("uid") String account) {
-        if (account.matches(accountPattern)) {
+        if (account != null && account.matches(accountPattern)) {
             String sessionId = lbsoap.login();
             try {
                 if (sessionId != null && lbsoap.isActiveAgreement(sessionId, account))

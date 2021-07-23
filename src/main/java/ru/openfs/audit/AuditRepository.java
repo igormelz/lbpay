@@ -50,7 +50,7 @@ public class AuditRepository {
                 .await().indefinitely();
     }
 
-    @ConsumeEvent("notify-bot")
+    @ConsumeEvent(value = "notify-bot", blocking = true)
     public void notifyBot(JsonObject msgObject) {
         producer.sendBody("direct:sendMessage", msgObject.encode());
     }
