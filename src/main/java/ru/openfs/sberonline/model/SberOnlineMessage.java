@@ -5,7 +5,7 @@ import javax.xml.bind.annotation.XmlRootElement;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
 @RegisterForReflection
-@XmlRootElement(name = "RESPONSE")
+@XmlRootElement(name = "response")
 public class SberOnlineMessage {
     public int CODE;
     public String MESSAGE;
