@@ -6,13 +6,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.UUID;
 
 import javax.inject.Inject;
-import javax.transaction.Transactional;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 
+import org.apache.camel.ProducerTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,40 +38,51 @@ public class SberOnlineResource {
     @Inject
     AuditRepository audit;
 
+    @Inject
+    ProducerTemplate producer;
+
     @GET
     @Produces(MediaType.APPLICATION_XML)
-    @Transactional
-    public SberOnlineMessage process(
-            @QueryParam("ACTION") String action, @QueryParam("ACCOUNT") String account,
+    // @Transactional
+    public String process(@QueryParam("ACTION") String action, @QueryParam("ACCOUNT") String account,
             @QueryParam("AMOUNT") double amount, @QueryParam("PAY_ID") String pay_id,
             @QueryParam("PAY_DATE") String pay_date) {
 
         // validate account format
         if (!account.matches("\\d+$")) {
             LOG.warn("<-- wrong format account: {}", account);
-            return new SberOnlineMessage(SberOnlineCode.ACCOUNT_WRONG_FORMAT);
+            return producer.requestBody("direct:marshalSberOnline",
+                    new SberOnlineMessage(SberOnlineCode.ACCOUNT_WRONG_FORMAT), String.class);
         }
 
         // connect to billing
         String sessionId = lbsoap.login();
         if (sessionId == null) {
-            return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
+            // return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
+            return producer.requestBody("direct:marshalSberOnline", new SberOnlineMessage(SberOnlineCode.TMP_ERR),
+                    String.class);
         }
 
         // process check acount
         if (action.equalsIgnoreCase("check")) {
             LOG.info("--> check account: {}", account);
-            return processCheckAccount(sessionId, account);
+            // return processCheckAccount(sessionId, account);
+            return producer.requestBody("direct:marshalSberOnline", processCheckAccount(sessionId, account),
+                    String.class);
         }
 
         // process payment
         if (action.equalsIgnoreCase("payment")) {
             LOG.info("--> payment orderNumber: {}, account: {}, amount: {}", pay_id, account, amount);
-            return processPayment(sessionId, account, amount, pay_id, pay_date);
+            // return processPayment(sessionId, account, amount, pay_id, pay_date);
+            return producer.requestBody("direct:marshalSberOnline",
+                    processPayment(sessionId, account, amount, pay_id, pay_date), String.class);
         }
 
         // raise error
-        return new SberOnlineMessage(SberOnlineCode.WRONG_ACTION);
+        // return new SberOnlineMessage(SberOnlineCode.WRONG_ACTION);
+        return producer.requestBody("direct:marshalSberOnline", new SberOnlineMessage(SberOnlineCode.WRONG_ACTION),
+                String.class);
     }
 
     private SberOnlineMessage processCheckAccount(String sessionId, String account) {
@@ -81,8 +92,7 @@ public class SberOnlineResource {
             lbsoap.findAccountByAgrmNum(sessionId, account).ifPresent(acctInfo -> {
 
                 // get active agreement
-                acctInfo.getAgreements().stream()
-                        .filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
+                acctInfo.getAgreements().stream().filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
                         .filter(agrm -> agrm.getClosedon().isBlank()).findFirst().ifPresent(agrm -> {
 
                             // add address
@@ -127,8 +137,7 @@ public class SberOnlineResource {
         }
     }
 
-    private SberOnlineMessage processPayment(
-            String sessionId, String account, Double amount, String pay_id,
+    private SberOnlineMessage processPayment(String sessionId, String account, Double amount, String pay_id,
             String pay_date) {
 
         // parse payDate
@@ -155,13 +164,9 @@ public class SberOnlineResource {
                 answer.REG_DATE = toRegDate(payment.getPay().getLocaldate());
                 lbsoap.findAccountByAgrmNum(sessionId, account).ifPresent(acct -> {
                     // build message
-                    JsonObject receipt = new JsonObject()
-                            .put("amount", amount)
-                            .put("orderNumber", pay_id)
-                            .put("account", account)
-                            .put("mdOrder", UUID.randomUUID().toString())
-                            .put("email", acct.getAccount().getEmail())
-                            .put("phone", acct.getAccount().getMobile());
+                    JsonObject receipt = new JsonObject().put("amount", amount).put("orderNumber", pay_id)
+                            .put("account", account).put("mdOrder", UUID.randomUUID().toString())
+                            .put("email", acct.getAccount().getEmail()).put("phone", acct.getAccount().getMobile());
                     // make audit check point
                     audit.setOrder(receipt);
                     // notify receipt service

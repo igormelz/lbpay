@@ -4,7 +4,6 @@ import java.net.URI;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
-import javax.transaction.Transactional;
 import javax.ws.rs.FormParam;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -90,13 +89,13 @@ public class SberResource {
 
     @POST
     @Path("checkout")
-    public Uni<Response> checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
+    public Response checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
         if (account.matches(accountPattern) && amount > 10 && amount < 20000) {
 
             // connect billing
             String sessionId = lbsoap.login();
             if (sessionId == null) {
-                return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
+                return Response.status(Status.BAD_REQUEST).build();
             }
 
             try {
@@ -119,23 +118,22 @@ public class SberResource {
                                     item.getString("errorMessage")));
                         }
                         return Response.status(Status.BAD_REQUEST).build();
-                    });
+                    }).await().indefinitely();
                 }
             } catch (RuntimeException e) {
                 LOG.error("!!! checkout: {}", e.getMessage());
-                return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
+                return Response.status(Status.BAD_REQUEST).build();
             } finally {
                 lbsoap.logout(sessionId);
             }
         }
-        return Uni.createFrom().item(Response.status(Status.BAD_REQUEST).build());
+        return Response.status(Status.BAD_REQUEST).build();
     }
 
     @GET
     @Path("sber/callback")
-    @Transactional
-    public Response callback(
-            @QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
+    // @Transactional
+    public Response callback(@QueryParam("mdOrder") String mdOrder, @QueryParam("orderNumber") Long orderNumber,
             @QueryParam("operation") String operation, @QueryParam("status") int status) {
 
         String sessionId = lbsoap.login();
@@ -164,14 +162,12 @@ public class SberResource {
                                     LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}",
                                             orderNumber, agrm.getNumber(), order.getAmount());
                                     // build message
-                                    JsonObject receipt = new JsonObject()
-                                            .put("amount", order.getAmount())
+                                    JsonObject receipt = new JsonObject().put("amount", order.getAmount())
                                             .put("orderNumber", String.valueOf(orderNumber))
-                                            .put("account", agrm.getNumber())
-                                            .put("mdOrder", mdOrder)
+                                            .put("account", agrm.getNumber()).put("mdOrder", mdOrder)
                                             .put("email", acct.getAccount().getEmail())
                                             .put("phone", acct.getAccount().getMobile());
-                                    // make checkpoint 
+                                    // make checkpoint
                                     audit.setOrder(receipt);
                                     // notify ofd
                                     bus.send("receipt-sale", receipt);
