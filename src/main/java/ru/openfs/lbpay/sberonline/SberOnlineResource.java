@@ -1,4 +1,4 @@
-package ru.openfs.sberonline;
+package ru.openfs.lbpay.sberonline;
 
 import java.time.DateTimeException;
 import java.time.LocalDateTime;
@@ -18,10 +18,10 @@ import org.slf4j.LoggerFactory;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import ru.openfs.audit.AuditRepository;
-import ru.openfs.lbsoap.LbSoapService;
-import ru.openfs.sberonline.model.SberOnlineCode;
-import ru.openfs.sberonline.model.SberOnlineMessage;
+import ru.openfs.lbpay.audit.AuditRepository;
+import ru.openfs.lbpay.lbsoap.LbSoapService;
+import ru.openfs.lbpay.sberonline.model.SberOnlineCode;
+import ru.openfs.lbpay.sberonline.model.SberOnlineMessage;
 
 @Path("/pay/sber/online")
 public class SberOnlineResource {

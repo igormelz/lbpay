@@ -1,4 +1,4 @@
-package ru.openfs.dreamkas;
+package ru.openfs.lbpay.dreamkas;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
@@ -30,8 +30,8 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
-import ru.openfs.audit.AuditRecord;
-import ru.openfs.audit.AuditRepository;
+import ru.openfs.lbpay.audit.AuditRecord;
+import ru.openfs.lbpay.audit.AuditRepository;
 
 @Path("/pay/dreamkas")
 public class DreamkasResource {

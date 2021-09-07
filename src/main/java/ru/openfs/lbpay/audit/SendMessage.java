@@ -1,4 +1,4 @@
-package ru.openfs.audit;
+package ru.openfs.lbpay.audit;
 
 import javax.inject.Singleton;
 

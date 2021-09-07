@@ -1,4 +1,4 @@
-package ru.openfs.lbsoap;
+package ru.openfs.lbpay.lbsoap;
 
 import javax.inject.Singleton;
 
