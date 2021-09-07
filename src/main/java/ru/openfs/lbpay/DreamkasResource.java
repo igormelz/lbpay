@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.dreamkas;
+package ru.openfs.lbpay;
 
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;

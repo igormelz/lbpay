@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.sberonline.model;
+package ru.openfs.lbpay.model;
 
 public enum SberOnlineCode {
     ERR(-1, "Внутренняя ошибка"), // don't define in sber proto, need 300

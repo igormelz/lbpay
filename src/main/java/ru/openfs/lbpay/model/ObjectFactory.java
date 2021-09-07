@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.sberonline.model;
+package ru.openfs.lbpay.model;
 
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.annotation.XmlElementDecl;

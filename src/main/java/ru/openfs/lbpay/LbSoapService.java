@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.lbsoap;
+package ru.openfs.lbpay;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;

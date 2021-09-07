@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.sber;
+package ru.openfs.lbpay;
 
 import java.net.URI;
 
@@ -25,7 +25,6 @@ import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import ru.openfs.lbpay.audit.AuditRepository;
-import ru.openfs.lbpay.lbsoap.LbSoapService;
 
 @Path("/pay")
 public class SberResource {

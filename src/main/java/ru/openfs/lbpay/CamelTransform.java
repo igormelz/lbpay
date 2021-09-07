@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.lbsoap;
+package ru.openfs.lbpay;
 
 import javax.inject.Singleton;
 
@@ -7,10 +7,10 @@ import org.apache.camel.converter.jaxb.JaxbDataFormat;
 import org.apache.camel.dataformat.soap.SoapJaxbDataFormat;
 import org.apache.camel.dataformat.soap.name.ServiceInterfaceStrategy;
 
-import ru.openfs.lbpay.sberonline.model.SberOnlineMessage;
+import ru.openfs.lbpay.model.SberOnlineMessage;
 
 @Singleton
-public class LbSoapTransform extends RouteBuilder {
+public class CamelTransform extends RouteBuilder {
 
     @Override
     public void configure() throws Exception {
