@@ -1,4 +1,4 @@
-# mysql-reactive-test project
+# LANBilling Payment Gateway (LBPAY) project
 
 This project uses Quarkus, the Supersonic Subatomic Java Framework.
 
