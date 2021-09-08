@@ -123,7 +123,7 @@ public class DreamkasResource {
         if (message.getString("type").equalsIgnoreCase("OPERATION")) {
             AuditRecord order = audit.findById(data.getString("externalId")).await().indefinitely();
             if (order == null) {
-                LOG.error("!!! not found order by externalId: {}", data.getString("externalId"));
+                LOG.warn("??? not found order by externalId: {}", data.encodePrettily());
                 return;
             }
 
@@ -141,7 +141,6 @@ public class DreamkasResource {
             LOG.info("--> ofd receipt shift: {}, doc: {}",
                     data.getLong("shiftId"),
                     data.getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
-            //audit.setFd(data);
         }
     }
 
