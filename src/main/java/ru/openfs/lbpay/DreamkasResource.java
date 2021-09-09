@@ -153,8 +153,7 @@ public class DreamkasResource {
             audit.processOperation(data);
 
         } else if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
-            LOG.info("--> ofd receipt shift: {}, doc: {}",
-                    data.getLong("shiftId"),
+            LOG.info("--> ofd receipt shift: {}, doc: {}", data.getLong("shiftId"),
                     data.getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
         }
     }
@@ -175,7 +174,7 @@ public class DreamkasResource {
     @PUT
     @Path("order/{key}")
     @Produces(MediaType.TEXT_PLAIN)
-    public Uni<String> receiptOrder(@PathParam("key") String key) {
+    public String receiptOrder(@PathParam("key") String key) {
         AuditRecord order = audit.findById(key).await().indefinitely();
         if (order == null) {
             LOG.error("!!! re-processing order:{} not found", key);
@@ -184,50 +183,33 @@ public class DreamkasResource {
         if (order.operId == null) {
             LOG.info("--> re-processing orderNumber: {} with status: not registered", order.orderNumber);
             receiptSale(JsonObject.mapFrom(order));
-            return Uni.createFrom().item("re-processing not registered order");
+            return "submit re-processing not registered order";
         } else if (order.status.equalsIgnoreCase("ERROR")) {
             LOG.warn("--> re-processing orderNumber: {} with status: error", order.orderNumber);
             receiptSale(JsonObject.mapFrom(order));
-            return Uni.createFrom().item("re-processing error order");
+            return "submit re-processing error order";
         } else {
             LOG.info("--> ask operation status");
             return client.get("/api/operations/" + order.operId).expect(predicate)
-                    .putHeader("Authorization", "Bearer " + token).send().onItem().transform(resp -> resp.bodyAsString())
-                    .onFailure().recoverWithItem("DK service error");
+                    .putHeader("Authorization", "Bearer " + token).send().onItem()
+                    .transform(resp -> resp.bodyAsString()).onFailure().recoverWithItem("DK service error").await()
+                    .indefinitely();
         }
     }
 
     private JsonObject createReceipt(JsonObject receipt) {
         // calc service price
         long price = (long) (receipt.getDouble("amount") * 100);
-        // {
-        // "externalId":"18e3e142-2f88-7a6d-ad98-56c501fa9b79",
-        // "deviceId":109266,
-        // "type":"SALE",
-        // "timeout":5,
-        // "taxMode":"SIMPLE_WO",
-        // "positions":[{"name":"Оплата услуг","type":"SERVICE","quantity":1,"price":55000,"priceSum":55000,"tax":"NDS_NO_TAX","taxSum":0}],
-        // "payments":[{"sum":55000,"type":"CASHLESS"}],
-        // "attributes":{"email":"Dmi7rich9407@gmail.com","phone":"+79650902202"},
-        // "total":{"priceSum":55000}}
-        return new JsonObject()
-                .put("externalId", receipt.getString("mdOrder"))
-                .put("deviceId", deviceId)
-                .put("type", "SALE")
-                .put("timeout", 5)
-                .put("taxMode", "SIMPLE_WO")
-                .put("positions", new JsonArray()
-                        .add(new JsonObject()
-                                .put("name", "Оплата услуг")
-                                .put("type", "SERVICE")
-                                .put("quantity", 1)
-                                .put("price", price)
-                                .put("priceSum", price)
-                                .put("tax", "NDS_NO_TAX")
+        // return receipt object 
+        return new JsonObject().put("externalId", receipt.getString("mdOrder")).put("deviceId", deviceId)
+                .put("type", "SALE").put("timeout", 5).put("taxMode", "SIMPLE_WO")
+                .put("positions",
+                        new JsonArray().add(new JsonObject().put("name", "Оплата услуг").put("type", "SERVICE")
+                                .put("quantity", 1).put("price", price).put("priceSum", price).put("tax", "NDS_NO_TAX")
                                 .put("taxSum", 0)))
                 .put("payments", new JsonArray().add(new JsonObject().put("sum", price).put("type", "CASHLESS")))
-                .put("attributes",
-                        new JsonObject().put("email", receipt.getString("email")).put("phone", receipt.getString("phone")))
+                .put("attributes", new JsonObject().put("email", receipt.getString("email")).put("phone",
+                        receipt.getString("phone")))
                 .put("total", new JsonObject().put("priceSum", price));
     }
 
