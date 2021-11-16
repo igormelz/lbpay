@@ -217,7 +217,7 @@ public class SberResource {
         }
 
         // process decline payment
-        if (!isSuccess) {
+        if (operation.equalsIgnoreCase("declinedByTimeout")) {
             LOG.info("--> declined orderNumber: {} ({})", orderNumber, operation);
             try {
                 lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
