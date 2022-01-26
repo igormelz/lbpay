@@ -65,6 +65,12 @@ public class SberResource {
     @ConfigProperty(name = "account.pattern", defaultValue = "^\\d{6,7}$")
     String accountPattern;
 
+    @ConfigProperty(name = "amount.min", defaultValue = "10")
+    int amountMin;
+
+    @ConfigProperty(name = "amount.max", defaultValue = "20000")
+    int amountMax;
+
     @Inject
     LbSoapService lbsoap;
 
@@ -104,7 +110,7 @@ public class SberResource {
     @POST
     @Path("checkout")
     public Response checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
-        if (account.matches(accountPattern) && amount > 10 && amount < 20000) {
+        if (account.matches(accountPattern) && amount >= amountMin && amount <= amountMax) {
 
             // connect billing
             String sessionId = lbsoap.login();
