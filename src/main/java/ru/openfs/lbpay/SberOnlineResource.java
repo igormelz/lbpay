@@ -33,7 +33,6 @@ import org.slf4j.LoggerFactory;
 
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import ru.openfs.lbpay.audit.AuditRepository;
 import ru.openfs.lbpay.model.SberOnlineCode;
 import ru.openfs.lbpay.model.SberOnlineMessage;
 

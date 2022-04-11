@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.audit;
+package ru.openfs.lbpay.model;
 
 import java.time.LocalDateTime;
 

@@ -31,6 +31,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.quarkus.logging.Log;
 import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
@@ -38,8 +39,8 @@ import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.mutiny.core.MultiMap;
 import io.vertx.mutiny.core.Vertx;
 import io.vertx.mutiny.core.eventbus.EventBus;
+import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
-import ru.openfs.lbpay.audit.AuditRepository;
 
 @Path("/pay")
 public class SberResource {
@@ -231,7 +232,7 @@ public class SberResource {
                         throw new RuntimeException("order was declined at " + order.getCanceldate());
                     lbsoap.cancelPrePayment(sessionId, orderNumber);
                     LOG.info("<-- success declined orderNumber: {}", orderNumber);
-                    bus.send("sber-payment-info", orderNumber);
+                    // bus.send("sber-payment-info", orderNumber);
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
@@ -260,27 +261,24 @@ public class SberResource {
         form.set("language", "ru");
         form.set("pageView", "DESKTOP");
         form.set("sessionTimeoutSecs", "300");
-        return client.post("/payment/rest/register.do").sendForm(form).onItem()
-                .transform(response -> response.bodyAsJsonObject());
+        return client.post("/payment/rest/register.do").sendForm(form)
+                .onItem().transform(HttpResponse::bodyAsJsonObject);
     }
 
-    @ConsumeEvent("sber-payment-info")
-    void getSberPaymentInfo(long orderNumber) {
-        MultiMap form = MultiMap.caseInsensitiveMultiMap();
-        form.set("userName", userName);
-        form.set("password", userPass);
-        form.set("orderNumber", String.valueOf(orderNumber));
-        client.post("/payment/rest/getOrderStatusExtended.do").sendForm(form).subscribe().with(response -> {
-            JsonObject json = response.bodyAsJsonObject();
-            if (!json.getString("errorCode").equalsIgnoreCase("0")) {
-                LOG.warn("!!! orderNumber: {} {}", orderNumber, json.getString("errorMessage"));
-                bus.send("notify-bot", new JsonObject().put("error", json.getString("errorMessage")));
-            } else {
-                LOG.info("--> orderNumber: {}, account: {}, amount: {}, reason: {} ({})", orderNumber,
-                        json.getString("orderDescription"), json.getDouble("amount") / 100,
-                        json.getString("actionCodeDescription"), json.getLong("actionCode"));
-            }
-        });
+    /**
+     * Get Sber payment status
+     * 
+     * @param orderNumber
+     * @return
+     */
+    @ConsumeEvent("sber-order-status")
+    Uni<JsonObject> getSberOrderStatus(long orderNumber) {
+        return client.post("/payment/rest/getOrderStatusExtended.do")
+                .sendForm(MultiMap.caseInsensitiveMultiMap()
+                        .set("userName", userName)
+                        .set("password", userPass)
+                        .set("orderNumber", String.valueOf(orderNumber)))
+                .onItem().transform(HttpResponse::bodyAsJsonObject);
     }
 
 }

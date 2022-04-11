@@ -19,13 +19,8 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.transaction.Transactional;
 import javax.ws.rs.Consumes;
-import javax.ws.rs.GET;
-import javax.ws.rs.NotFoundException;
 import javax.ws.rs.POST;
-import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -33,8 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.quarkus.vertx.ConsumeEvent;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -45,8 +38,7 @@ import io.vertx.mutiny.ext.web.client.HttpResponse;
 import io.vertx.mutiny.ext.web.client.WebClient;
 import io.vertx.mutiny.ext.web.client.predicate.ErrorConverter;
 import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
-import ru.openfs.lbpay.audit.AuditRecord;
-import ru.openfs.lbpay.audit.AuditRepository;
+import ru.openfs.lbpay.model.AuditRecord;
 
 @Path("/pay/dreamkas")
 public class DreamkasResource {
@@ -155,45 +147,6 @@ public class DreamkasResource {
         } else if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
             LOG.info("--> ofd receipt shift: {}, doc: {}", data.getLong("shiftId"),
                     data.getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
-        }
-    }
-
-    @GET
-    @Path("order")
-    public Multi<AuditRecord> getOrders() {
-        return audit.findAll();
-    }
-
-    @GET
-    @Path("order/{key}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Uni<AuditRecord> order(@PathParam("key") String key) {
-        return audit.findById(key);
-    }
-
-    @PUT
-    @Path("order/{key}")
-    @Produces(MediaType.TEXT_PLAIN)
-    public String receiptOrder(@PathParam("key") String key) {
-        AuditRecord order = audit.findById(key).await().indefinitely();
-        if (order == null) {
-            LOG.error("!!! re-processing order:{} not found", key);
-            throw new NotFoundException("order not found");
-        }
-        if (order.operId == null) {
-            LOG.info("--> re-processing orderNumber: {} with status: not registered", order.orderNumber);
-            receiptSale(JsonObject.mapFrom(order));
-            return "submit re-processing not registered order";
-        } else if (order.status.equalsIgnoreCase("ERROR")) {
-            LOG.warn("--> re-processing orderNumber: {} with status: error", order.orderNumber);
-            receiptSale(JsonObject.mapFrom(order));
-            return "submit re-processing error order";
-        } else {
-            LOG.info("--> ask operation status");
-            return client.get("/api/operations/" + order.operId).expect(predicate)
-                    .putHeader("Authorization", "Bearer " + token).send().onItem()
-                    .transform(resp -> resp.bodyAsString()).onFailure().recoverWithItem("DK service error").await()
-                    .indefinitely();
         }
     }
 

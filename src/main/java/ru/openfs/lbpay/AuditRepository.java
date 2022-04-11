@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.audit;
+package ru.openfs.lbpay;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.ApplicationScoped;
@@ -26,14 +26,19 @@ import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
+import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.sqlclient.Row;
 import io.vertx.mutiny.sqlclient.Tuple;
+import ru.openfs.lbpay.model.AuditRecord;
 
 @ApplicationScoped
 public class AuditRepository {
 
     @ConfigProperty(name = "audit.schema.create", defaultValue = "false")
     boolean schemaCreate;
+
+    @Inject
+    EventBus bus;
 
     @Inject
     io.vertx.mutiny.mysqlclient.MySQLPool client;
@@ -51,16 +56,16 @@ public class AuditRepository {
     private void initdb() {
         client.query("DROP TABLE IF EXISTS ReceiptOperation").execute()
                 .flatMap(r -> client.query("CREATE TABLE ReceiptOperation (" +
-                                           "mdOrder CHAR(64) NOT NULL," +
-                                           "account VARCHAR(255)," +
-                                           "amount DOUBLE," +
-                                           "createAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP," +
-                                           "email VARCHAR(255)," +
-                                           "operId VARCHAR(64)," +
-                                           "orderNumber VARCHAR(64)," +
-                                           "phone VARCHAR(255)," +
-                                           "status VARCHAR(64)," +
-                                           "PRIMARY KEY (mdOrder))")
+                        "mdOrder CHAR(64) NOT NULL," +
+                        "account VARCHAR(255)," +
+                        "amount DOUBLE," +
+                        "createAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP," +
+                        "email VARCHAR(255)," +
+                        "operId VARCHAR(64)," +
+                        "orderNumber VARCHAR(64)," +
+                        "phone VARCHAR(255)," +
+                        "status VARCHAR(64)," +
+                        "PRIMARY KEY (mdOrder))")
                         .execute())
                 .await().indefinitely();
     }
@@ -73,8 +78,11 @@ public class AuditRepository {
     public void setOrder(JsonObject order) {
         client.preparedQuery(
                 "INSERT ReceiptOperation SET mdOrder = ?, orderNumber = ?, account = ?, amount = ?, email = ?, phone = ?")
-                .execute(Tuple.of(order.getString("mdOrder"), order.getString("orderNumber"), order.getString("account"),
-                        order.getDouble("amount"), order.getString("email"), order.getString("phone")))
+                .execute(
+                        Tuple.of(order.getString("mdOrder"), order.getString("orderNumber"),
+                                order.getString("account"),
+                                order.getDouble("amount"), order.getString("email"),
+                                order.getString("phone")))
                 .await().indefinitely();
     }
 
@@ -89,7 +97,8 @@ public class AuditRepository {
 
     public void setOperation(JsonObject operation) {
         client.preparedQuery("UPDATE ReceiptOperation SET operId = ?, status = ? WHERE mdOrder = ?")
-                .execute(Tuple.of(operation.getString("id"), operation.getString("status"), operation.getString("externalId")))
+                .execute(Tuple.of(operation.getString("id"), operation.getString("status"),
+                        operation.getString("externalId")))
                 .subscribe().with(i -> {
                 });
     }
@@ -114,8 +123,25 @@ public class AuditRepository {
 
     private static AuditRecord from(Row row) {
         return new AuditRecord(
-                row.getString("mdOrder"), row.getString("orderNumber"), row.getString("account"), row.getDouble("amount"),
-                row.getString("phone"), row.getString("email"), row.getLocalDateTime("createAt"), row.getString("operId"),
+                row.getString("mdOrder"),
+                row.getString("orderNumber"),
+                row.getString("account"),
+                row.getDouble("amount"),
+                row.getString("phone"),
+                row.getString("email"),
+                row.getLocalDateTime("createAt"),
+                row.getString("operId"),
                 row.getString("status"));
     }
+
+    //
+    public Multi<JsonObject> getPending() {
+        return client.query("select record_id, pay_date from billing.pre_payments where status = 0").execute()
+                .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
+                .onItem()
+                .transform(row -> new JsonObject().put("orderNumber", row.getInteger("record_id")).put(
+                        "date",
+                        row.getLocalDateTime("pay_date")));
+    }
+
 }

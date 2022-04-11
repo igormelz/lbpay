@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.audit;
+package ru.openfs.lbpay;
 
 import javax.inject.Singleton;
 
@@ -21,18 +21,18 @@ import org.apache.camel.builder.RouteBuilder;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @Singleton
-public class SendMessage extends RouteBuilder {
+public class CamelSendMessage extends RouteBuilder {
 
-    @ConfigProperty(name = "telegram.token")
+    @ConfigProperty(name = "telegram.token", defaultValue = "TOKEN")
     String token;
 
-    @ConfigProperty(name = "telegram.chatid")
+    @ConfigProperty(name = "telegram.chatid", defaultValue = "123456789")
     String chatId;
 
     @Override
     public void configure() throws Exception {
         from("direct:sendMessage").routeId("SendBotMessage")
-        .toF("telegram:bots?authorizationToken=%s&chatId=%s",token,chatId);
+                .toF("telegram:bots?authorizationToken=%s&chatId=%s", token, chatId);
     }
-    
+
 }
