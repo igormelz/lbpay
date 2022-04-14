@@ -8,6 +8,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Multi;
@@ -15,6 +16,7 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.core.eventbus.Message;
+import ru.openfs.lbpay.model.AuditOrder;
 import ru.openfs.lbpay.model.AuditRecord;
 
 @Path("/audit")
@@ -68,8 +70,8 @@ public class AuditResource {
     @GET
     @Path("pending")
     @Produces(MediaType.APPLICATION_JSON)
-    public Multi<JsonObject> pending() {
-        return audit.getPending();
+    public Multi<AuditOrder> pending() {
+        return audit.getPendingOrders();
     }
 
     @GET
@@ -78,6 +80,13 @@ public class AuditResource {
     public Uni<JsonObject> pendingStatus(@PathParam("orderNumber") long orderNumber) {
         return bus.<JsonObject>request("sber-order-status", orderNumber)
                 .onItem().transform(Message::body);
+    }
+
+    @PUT
+    @Path("pending/{orderNumber}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Uni<Response> clearPendingOrder(@PathParam("orderNumber") long orderNumber) {
+        return audit.clearOrder(orderNumber).onItem().transform(response -> response ? Response.ok().build() : Response.notModified().build());
     }
 
 }

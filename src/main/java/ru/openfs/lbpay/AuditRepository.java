@@ -22,6 +22,7 @@ import javax.inject.Inject;
 import org.apache.camel.ProducerTemplate;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import io.quarkus.logging.Log;
 import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -29,6 +30,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.sqlclient.Row;
 import io.vertx.mutiny.sqlclient.Tuple;
+import ru.openfs.lbpay.model.AuditOrder;
 import ru.openfs.lbpay.model.AuditRecord;
 
 @ApplicationScoped
@@ -78,11 +80,12 @@ public class AuditRepository {
     public void setOrder(JsonObject order) {
         client.preparedQuery(
                 "INSERT ReceiptOperation SET mdOrder = ?, orderNumber = ?, account = ?, amount = ?, email = ?, phone = ?")
-                .execute(
-                        Tuple.of(order.getString("mdOrder"), order.getString("orderNumber"),
-                                order.getString("account"),
-                                order.getDouble("amount"), order.getString("email"),
-                                order.getString("phone")))
+                .execute(Tuple.of(order.getString("mdOrder"),
+                        order.getString("orderNumber"),
+                        order.getString("account"),
+                        order.getDouble("amount"),
+                        order.getString("email"),
+                        order.getString("phone")))
                 .await().indefinitely();
     }
 
@@ -134,14 +137,39 @@ public class AuditRepository {
                 row.getString("status"));
     }
 
-    //
-    public Multi<JsonObject> getPending() {
-        return client.query("select record_id, pay_date from billing.pre_payments where status = 0").execute()
+    private static AuditOrder orderFrom(Row row) {
+        return new AuditOrder(
+                row.getInteger("record_id"),
+                row.getLocalDateTime("pay_date"),
+                row.getString("comment"),
+                row.getInteger("diff"));
+    }
+
+    public Multi<AuditOrder> getPendingOrders() {
+        return client.query("SELECT record_id, pay_date, comment, " +
+                "unix_timestamp(current_timestamp) - unix_timestamp(pay_date) as diff " +
+                "FROM billing.pre_payments WHERE status = 0")
+                .execute()
                 .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
-                .onItem()
-                .transform(row -> new JsonObject().put("orderNumber", row.getInteger("record_id")).put(
-                        "date",
-                        row.getLocalDateTime("pay_date")));
+                .onItem().transform(AuditRepository::orderFrom);
+    }
+
+    public void setWaitOrder(long orderNumber) {
+        client.preparedQuery("UPDATE billing.pre_payments SET comment = 'wait deposited' WHERE record_id = ?")
+                .execute(Tuple.of(orderNumber)).subscribe().with(
+                        result -> Log.info(String.format("mark orderNumber: %d as waiting deposited", orderNumber)),
+                        failure -> Log.error(failure));
+    }
+
+    public Uni<Boolean> clearOrder(long orderNumber) {
+        return client.preparedQuery(
+                "UPDATE billing.pre_payments SET comment = CONCAT(comment,':CLEAR'), status = 2 WHERE record_id = ?")
+                .execute(Tuple.of(orderNumber))
+                .onItem().transform(row -> row.rowCount() != 0);
+        // .subscribe().with(
+        // result -> Log.info(String.format("clear pending status orderNumber: %d",
+        // orderNumber)),
+        // failure -> Log.error(failure));
     }
 
 }

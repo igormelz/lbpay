@@ -28,8 +28,6 @@ import javax.inject.Singleton;
 
 import org.apache.camel.ProducerTemplate;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import api3.CancelPrePayment;
 import api3.ConfirmPrePayment;
@@ -52,6 +50,7 @@ import api3.SoapFilter;
 import api3.SoapPayment;
 import api3.SoapPaymentFull;
 import api3.SoapPrePayment;
+import io.quarkus.logging.Log;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
 import io.vertx.mutiny.core.Vertx;
@@ -63,7 +62,6 @@ import io.vertx.mutiny.ext.web.client.predicate.ResponsePredicate;
 
 @Singleton
 public class LbSoapService {
-    private static final Logger LOG = LoggerFactory.getLogger(LbSoapService.class);
     public static final Long AGRM_NUM = 5L;
     public static final Long AGRM_ID = 11L;
     private static final DateTimeFormatter BILL_DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -72,10 +70,10 @@ public class LbSoapService {
     @ConfigProperty(name = "lbcore.host", defaultValue = "127.0.0.1")
     String host;
 
-    @ConfigProperty(name = "lbcore.login")
+    @ConfigProperty(name = "lbcore.login", defaultValue = "login")
     String login;
 
-    @ConfigProperty(name = "lbcore.pass")
+    @ConfigProperty(name = "lbcore.pass", defaultValue = "pass")
     String pass;
 
     @Inject
@@ -96,7 +94,7 @@ public class LbSoapService {
         try {
             return callService(soapRequest, null).getString("sessionId");
         } catch (RuntimeException e) {
-            LOG.error(e.getMessage());
+            Log.error(e.getMessage());
             return null;
         }
     }

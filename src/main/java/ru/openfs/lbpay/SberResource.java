@@ -28,8 +28,6 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import io.quarkus.logging.Log;
 import io.quarkus.vertx.ConsumeEvent;
@@ -44,7 +42,6 @@ import io.vertx.mutiny.ext.web.client.WebClient;
 
 @Path("/pay")
 public class SberResource {
-    private static final Logger LOG = LoggerFactory.getLogger(SberResource.class);
 
     private WebClient client;
 
@@ -99,7 +96,7 @@ public class SberResource {
                 if (sessionId != null && lbsoap.isActiveAgreement(sessionId, account))
                     return Response.noContent().build();
             } catch (RuntimeException e) {
-                LOG.error("!!! check account: {}", e.getMessage());
+                Log.error("check account:", e);
                 return Response.status(Status.BAD_REQUEST).build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -129,12 +126,14 @@ public class SberResource {
                     // call sberbank
                     return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
                         if (item.containsKey("formUrl") && item.containsKey("orderId")) {
-                            LOG.info("<-- success checkout orderNumber: {}, account: {}, amount: {}, mdOrder: {}",
-                                    orderNumber, account, amount, item.getString("orderId"));
+                            Log.info(String.format(
+                                    "<-- success checkout orderNumber: %d, account: %s, amount: %d, mdOrder: %s",
+                                    orderNumber, account, amount, item.getString("orderId")));
                             return Response.seeOther(URI.create(item.getString("formUrl"))).build();
                         }
                         if (item.containsKey("errorCode")) {
-                            LOG.error("!!! orderNumber: {} checkout: {}", orderNumber, item.getString("errorMessage"));
+                            Log.error(String.format("orderNumber: %d checkout: %s", orderNumber,
+                                    item.getString("errorMessage")));
                             bus.send("notify-bot", new JsonObject().put("errorCode", 102).put("errorMessage",
                                     item.getString("errorMessage")));
                         }
@@ -142,7 +141,7 @@ public class SberResource {
                     }).await().indefinitely();
                 }
             } catch (RuntimeException e) {
-                LOG.error("!!! checkout: {}", e.getMessage());
+                Log.error("checkout:", e);
                 return Response.status(Status.BAD_REQUEST).build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -165,7 +164,7 @@ public class SberResource {
 
         // process payment
         if (isSuccess && operation.equalsIgnoreCase("deposited")) {
-            LOG.info("--> deposited orderNumber: {}", orderNumber);
+            Log.info(String.format("--> deposited orderNumber: %d", orderNumber));
             try {
                 lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
 
@@ -180,8 +179,9 @@ public class SberResource {
                         // get agreement
                         acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
                                 .ifPresent(agrm -> {
-                                    LOG.info("<-- success deposited orderNumber: {}, account: {}, amount: {}",
-                                            orderNumber, agrm.getNumber(), order.getAmount());
+                                    Log.info(String.format(
+                                            "<-- success deposited orderNumber: %d, account: %s, amount: %d",
+                                            orderNumber, agrm.getNumber(), order.getAmount()));
                                     // build message
                                     JsonObject receipt = new JsonObject().put("amount", order.getAmount())
                                             .put("orderNumber", String.valueOf(orderNumber))
@@ -197,7 +197,7 @@ public class SberResource {
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                LOG.error("!!! orderNumber: {} deposited: {}", orderNumber, e.getMessage());
+                Log.error(String.format("!!! orderNumber: %d deposited: %s", orderNumber, e.getMessage()));
                 bus.send("notify-bot", new JsonObject().put("errorCode", 103).put("errorMessage", e.getMessage()));
                 return Response.serverError().build();
             } finally {
@@ -207,36 +207,36 @@ public class SberResource {
 
         // process refund payment
         if (isSuccess && operation.equalsIgnoreCase("refunded")) {
-            LOG.warn("--> refunded orderNumber: {}", orderNumber);
+            Log.warn(String.format("--> refunded orderNumber: %d", orderNumber));
             return Response.ok().build();
         }
 
         if (isSuccess && operation.equalsIgnoreCase("approved")) {
-            LOG.info("--> approved orderNumber: {} -- NOOP", orderNumber);
+            Log.info(String.format("--> approved orderNumber: %d -- NOOP", orderNumber));
             return Response.ok().build();
         }
 
         // process unsuccess payment
         if (!isSuccess && operation.equalsIgnoreCase("deposited")) {
-            LOG.info("--> unsuccess deposited orderNumber: {}", orderNumber);
-            LOG.info("<-- orderNumber: {} waiting for success", orderNumber);
+            Log.warn(String.format("--> unsuccess deposited orderNumber: %d", orderNumber));
+            audit.setWaitOrder(orderNumber);
+            Log.info(String.format("<-- orderNumber: %d waiting for success", orderNumber));
             return Response.ok().build();
         }
 
         // process decline payment
         if (operation.equalsIgnoreCase("declinedByTimeout")) {
-            LOG.info("--> declined orderNumber: {} ({})", orderNumber, operation);
+            Log.info(String.format("--> declined orderNumber: %d (%s)", orderNumber, operation));
             try {
                 lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
                     if (order.getStatus() != 0)
                         throw new RuntimeException("order was declined at " + order.getCanceldate());
                     lbsoap.cancelPrePayment(sessionId, orderNumber);
-                    LOG.info("<-- success declined orderNumber: {}", orderNumber);
-                    // bus.send("sber-payment-info", orderNumber);
+                    Log.info(String.format("<-- success cancel orderNumber: %d", orderNumber));
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                LOG.error("!!! orderNumber: {} declined: {}", orderNumber, e.getMessage());
+                Log.error(String.format("orderNumber: %d declined: %s", orderNumber, e.getMessage()));
                 bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
                 return Response.serverError().build();
             } finally {
@@ -244,7 +244,7 @@ public class SberResource {
             }
         }
 
-        LOG.error("!!! unknown request");
+        Log.error("unknown request");
         return Response.serverError().build();
     }
 
