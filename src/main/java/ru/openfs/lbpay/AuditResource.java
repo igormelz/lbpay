@@ -15,7 +15,6 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import io.vertx.mutiny.core.eventbus.Message;
 import ru.openfs.lbpay.model.AuditOrder;
 import ru.openfs.lbpay.model.AuditRecord;
 
@@ -74,19 +73,17 @@ public class AuditResource {
         return audit.getPendingOrders();
     }
 
-    @GET
-    @Path("pending/{orderNumber}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Uni<JsonObject> pendingStatus(@PathParam("orderNumber") long orderNumber) {
-        return bus.<JsonObject>request("sber-order-status", orderNumber)
-                .onItem().transform(Message::body);
-    }
-
     @PUT
-    @Path("pending/{orderNumber}")
-    @Produces(MediaType.APPLICATION_JSON)
+    @Path("cancel/{orderNumber}")
     public Uni<Response> clearPendingOrder(@PathParam("orderNumber") long orderNumber) {
-        return audit.clearOrder(orderNumber).onItem().transform(response -> response ? Response.ok().build() : Response.notModified().build());
+        return audit.clearOrder(orderNumber).onItem()
+                .transform(cleared -> {
+                    if (cleared) {
+                        Log.info(String.format("canceled pending orderNumber: %d", orderNumber));
+                        return Response.ok().build();
+                    }
+                    return Response.notModified().build();
+                });
     }
 
 }

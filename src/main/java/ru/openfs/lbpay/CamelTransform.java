@@ -19,7 +19,7 @@ import javax.inject.Singleton;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.converter.jaxb.JaxbDataFormat;
-import org.apache.camel.dataformat.soap.SoapJaxbDataFormat;
+import org.apache.camel.dataformat.soap.SoapDataFormat;
 import org.apache.camel.dataformat.soap.name.ServiceInterfaceStrategy;
 
 import ru.openfs.lbpay.model.SberOnlineMessage;
@@ -31,7 +31,7 @@ public class CamelTransform extends RouteBuilder {
     public void configure() throws Exception {
 
         // define SOAP format
-        SoapJaxbDataFormat soap = new SoapJaxbDataFormat("api3",
+        SoapDataFormat soap = new SoapDataFormat("api3",
                 new ServiceInterfaceStrategy(api3.Api3PortType.class, true));
 
         // define format for SberOnline

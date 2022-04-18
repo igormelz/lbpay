@@ -23,14 +23,16 @@ import javax.ws.rs.FormParam;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
+import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
-import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -109,7 +111,7 @@ public class SberResource {
     @Path("checkout")
     public Response checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
         if (account.matches(accountPattern) && amount >= amountMin && amount <= amountMax) {
-
+            
             // connect billing
             String sessionId = lbsoap.login();
             if (sessionId == null) {
@@ -127,7 +129,7 @@ public class SberResource {
                     return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
                         if (item.containsKey("formUrl") && item.containsKey("orderId")) {
                             Log.info(String.format(
-                                    "<-- success checkout orderNumber: %d, account: %s, amount: %d, mdOrder: %s",
+                                    "<-- success checkout orderNumber: %d, account: %s, amount: %.2f, mdOrder: %s",
                                     orderNumber, account, amount, item.getString("orderId")));
                             return Response.seeOther(URI.create(item.getString("formUrl"))).build();
                         }
@@ -180,7 +182,7 @@ public class SberResource {
                         acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
                                 .ifPresent(agrm -> {
                                     Log.info(String.format(
-                                            "<-- success deposited orderNumber: %d, account: %s, amount: %d",
+                                            "<-- success deposited orderNumber: %d, account: %s, amount: %.2f",
                                             orderNumber, agrm.getNumber(), order.getAmount()));
                                     // build message
                                     JsonObject receipt = new JsonObject().put("amount", order.getAmount())
@@ -265,14 +267,10 @@ public class SberResource {
                 .onItem().transform(HttpResponse::bodyAsJsonObject);
     }
 
-    /**
-     * Get Sber payment status
-     * 
-     * @param orderNumber
-     * @return
-     */
-    @ConsumeEvent("sber-order-status")
-    Uni<JsonObject> getSberOrderStatus(long orderNumber) {
+    @GET
+    @Path("sber/status/{orderNumber}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Uni<JsonObject> getSberOrderStatus(@PathParam("orderNumber") long orderNumber) {
         return client.post("/payment/rest/getOrderStatusExtended.do")
                 .sendForm(MultiMap.caseInsensitiveMultiMap()
                         .set("userName", userName)

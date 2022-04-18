@@ -157,19 +157,18 @@ public class AuditRepository {
     public void setWaitOrder(long orderNumber) {
         client.preparedQuery("UPDATE billing.pre_payments SET comment = 'wait deposited' WHERE record_id = ?")
                 .execute(Tuple.of(orderNumber)).subscribe().with(
-                        result -> Log.info(String.format("mark orderNumber: %d as waiting deposited", orderNumber)),
+                        result -> Log.info(String.format(
+                                "mark orderNumber: %d as waiting deposited",
+                                orderNumber)),
                         failure -> Log.error(failure));
     }
 
     public Uni<Boolean> clearOrder(long orderNumber) {
-        return client.preparedQuery(
-                "UPDATE billing.pre_payments SET comment = CONCAT(comment,':CLEAR'), status = 2 WHERE record_id = ?")
+        return client.preparedQuery("UPDATE billing.pre_payments " +
+                "SET cancel_date = CURRENT_TIMESTAMP, comment = CONCAT(comment,':CLEAR'), status = 2 " +
+                "WHERE record_id = ?")
                 .execute(Tuple.of(orderNumber))
-                .onItem().transform(row -> row.rowCount() != 0);
-        // .subscribe().with(
-        // result -> Log.info(String.format("clear pending status orderNumber: %d",
-        // orderNumber)),
-        // failure -> Log.error(failure));
+                .onItem().transform(row -> row.rowCount() == 1);
     }
 
 }

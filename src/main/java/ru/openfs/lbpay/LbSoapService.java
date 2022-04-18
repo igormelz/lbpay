@@ -233,7 +233,7 @@ public class LbSoapService {
 
     ResponsePredicate predicate = ResponsePredicate.create(ResponsePredicate.SC_SUCCESS, converter);
 
-    private String parseSessionId(List<String> cookie) {
+    private static String parseSessionId(List<String> cookie) {
         return cookie.stream().filter(c -> c.startsWith("sessnum") && c.contains("Max-Age")).findAny()
                 .map(c -> c.substring(0, c.indexOf(";"))).orElse(null);
     }
