@@ -24,9 +24,8 @@ import javax.ws.rs.Path;
 import javax.ws.rs.core.MediaType;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
+import io.quarkus.logging.Log;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -42,7 +41,6 @@ import ru.openfs.lbpay.model.AuditRecord;
 
 @Path("/pay/dreamkas")
 public class DreamkasResource {
-    private static final Logger LOG = LoggerFactory.getLogger(DreamkasResource.class);
     private WebClient client;
 
     @ConfigProperty(name = "dreamkas.host", defaultValue = "kabinet.dreamkas.ru")
@@ -79,10 +77,10 @@ public class DreamkasResource {
         HttpResponse<Buffer> response = result.response();
         String err = response.bodyAsString();
         if (err != null && !err.isBlank()) {
-            LOG.error(err);
+            Log.error(err);
             return new RuntimeException(err);
         }
-        LOG.error("!!! DK service error:{}", result.message());
+        Log.error(String.format("!!! DK service error: %s", result.message()));
         return new RuntimeException(result.message());
     });
 
@@ -101,22 +99,22 @@ public class DreamkasResource {
         }
 
         if (!isValid) {
-            LOG.error("!!! receipt orderNumber: {} - no required email: {} or phone: {}",
-                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone"));
+            Log.error(String.format("!!! receipt orderNumber: %s - no required email: %s or phone: %s",
+                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone")));
             bus.send("notify-bot", receipt.put("errorMessage", "no required email or phone"));
             return;
         }
 
-        LOG.info("<-- receipt orderNumber: {}", receipt.getString("orderNumber"));
+        Log.info(String.format("<-- receipt orderNumber: %s", receipt.getString("orderNumber")));
         client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
                 .sendJson(createReceipt(receipt)).subscribe().with(response -> {
                     JsonObject operation = response.bodyAsJsonObject();
-                    LOG.info("--> {} receipt orderNumber: {}, operation: {}",
+                    Log.info(String.format("--> %s receipt orderNumber: %s, operation: %s",
                             operation.getString("status").toLowerCase(), receipt.getString("orderNumber"),
-                            operation.getString("id"));
+                            operation.getString("id")));
                     audit.setOperation(operation);
                 }, err -> {
-                    LOG.error("!!! receipt orderNumber: {} - {}", receipt.getString("orderNumber"), err.getMessage());
+                    Log.error(String.format("!!! receipt orderNumber: %s", receipt.getString("orderNumber")), err);
                     bus.send("notify-bot", receipt.put("errorMessage", err.getMessage()));
                 });
     }
@@ -130,30 +128,32 @@ public class DreamkasResource {
         if (message.getString("type").equalsIgnoreCase("OPERATION")) {
             AuditRecord order = audit.findById(data.getString("externalId")).await().indefinitely();
             if (order == null) {
-                LOG.warn("??? not found order by externalId: {}", data.encodePrettily());
+                Log.warn(String.format("??? not found order by externalId: %s", data.encodePrettily()));
                 return;
             }
 
             if (data.getString("status").equalsIgnoreCase("ERROR")) {
-                LOG.error("!!! receipt orderNumber: {} - {}", order.orderNumber,
-                        data.getJsonObject("data").getJsonObject("error").getString("message"));
+                Log.error(String.format("!!! receipt orderNumber: %s - %s", order.orderNumber,
+                        data.getJsonObject("data").getJsonObject("error").getString("message")));
                 bus.send("notify-bot", data.put("orderNumber", order.orderNumber));
+                
             } else {
-                LOG.info("--> {} receipt orderNumber: {}, operation: {}", data.getString("status").toLowerCase(),
-                        order.orderNumber, data.getString("id"));
+                Log.info(String.format("--> {} receipt orderNumber: %s, operation: %s",
+                        data.getString("status").toLowerCase(),
+                        order.orderNumber, data.getString("id")));
             }
             audit.processOperation(data);
 
         } else if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
-            LOG.info("--> ofd receipt shift: {}, doc: {}", data.getLong("shiftId"),
-                    data.getValue("fiscalDocumentNumber", "fiscalDocumentNumber"));
+            Log.info(String.format("--> ofd receipt shift: %d, doc: %s", data.getLong("shiftId"),
+                    data.getString("fiscalDocumentNumber")));
         }
     }
 
     private JsonObject createReceipt(JsonObject receipt) {
         // calc service price
         long price = (long) (receipt.getDouble("amount") * 100);
-        // return receipt object 
+        // return receipt object
         return new JsonObject().put("externalId", receipt.getString("mdOrder")).put("deviceId", deviceId)
                 .put("type", "SALE").put("timeout", 5).put("taxMode", "SIMPLE_WO")
                 .put("positions",
