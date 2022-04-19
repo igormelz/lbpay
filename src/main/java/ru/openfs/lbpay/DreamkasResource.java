@@ -99,7 +99,7 @@ public class DreamkasResource {
         }
 
         if (!isValid) {
-            Log.error(String.format("!!! receipt orderNumber: %s - no required email: %s or phone: %s",
+            Log.error(String.format("receipt orderNumber: %s - no required email: %s or phone: %s",
                     receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone")));
             bus.send("notify-bot", receipt.put("errorMessage", "no required email or phone"));
             return;
@@ -114,7 +114,7 @@ public class DreamkasResource {
                             operation.getString("id")));
                     audit.setOperation(operation);
                 }, err -> {
-                    Log.error(String.format("!!! receipt orderNumber: %s", receipt.getString("orderNumber")), err);
+                    Log.error(String.format("receipt orderNumber: %s", receipt.getString("orderNumber")), err);
                     bus.send("notify-bot", receipt.put("errorMessage", err.getMessage()));
                 });
     }
@@ -136,9 +136,9 @@ public class DreamkasResource {
                 Log.error(String.format("!!! receipt orderNumber: %s - %s", order.orderNumber,
                         data.getJsonObject("data").getJsonObject("error").getString("message")));
                 bus.send("notify-bot", data.put("orderNumber", order.orderNumber));
-                
+
             } else {
-                Log.info(String.format("--> {} receipt orderNumber: %s, operation: %s",
+                Log.info(String.format("--> %s receipt orderNumber: %s, operation: %s",
                         data.getString("status").toLowerCase(),
                         order.orderNumber, data.getString("id")));
             }
