@@ -111,7 +111,7 @@ public class SberResource {
     @Path("checkout")
     public Response checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
         if (account.matches(accountPattern) && amount >= amountMin && amount <= amountMax) {
-            
+
             // connect billing
             String sessionId = lbsoap.login();
             if (sessionId == null) {
@@ -128,14 +128,12 @@ public class SberResource {
                     // call sberbank
                     return registerPayment(orderNumber, account, amount).onItem().transform(item -> {
                         if (item.containsKey("formUrl") && item.containsKey("orderId")) {
-                            Log.info(String.format(
-                                    "<-- success checkout orderNumber: %d, account: %s, amount: %.2f, mdOrder: %s",
-                                    orderNumber, account, amount, item.getString("orderId")));
+                            Log.infof("checkout success orderNumber: %d, account: %s, amount: %.2f, mdOrder: %s",
+                                    orderNumber, account, amount, item.getString("orderId"));
                             return Response.seeOther(URI.create(item.getString("formUrl"))).build();
                         }
                         if (item.containsKey("errorCode")) {
-                            Log.error(String.format("orderNumber: %d checkout: %s", orderNumber,
-                                    item.getString("errorMessage")));
+                            Log.errorf("orderNumber: %d checkout: %s", orderNumber, item.getString("errorMessage"));
                             bus.send("notify-bot", new JsonObject().put("errorCode", 102).put("errorMessage",
                                     item.getString("errorMessage")));
                         }
@@ -166,7 +164,7 @@ public class SberResource {
 
         // process payment
         if (isSuccess && operation.equalsIgnoreCase("deposited")) {
-            Log.info(String.format("--> deposited orderNumber: %d", orderNumber));
+            Log.infof("deposited orderNumber: %d", orderNumber);
             try {
                 lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
 
@@ -181,9 +179,8 @@ public class SberResource {
                         // get agreement
                         acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
                                 .ifPresent(agrm -> {
-                                    Log.info(String.format(
-                                            "<-- success deposited orderNumber: %d, account: %s, amount: %.2f",
-                                            orderNumber, agrm.getNumber(), order.getAmount()));
+                                    Log.infof("deposited success orderNumber: %d, account: %s, amount: %.2f",
+                                            orderNumber, agrm.getNumber(), order.getAmount());
                                     // build message
                                     JsonObject receipt = new JsonObject().put("amount", order.getAmount())
                                             .put("orderNumber", String.valueOf(orderNumber))
@@ -199,7 +196,7 @@ public class SberResource {
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                Log.error(String.format("!!! orderNumber: %d deposited: %s", orderNumber, e.getMessage()));
+                Log.errorf("orderNumber: %d deposited: %s", orderNumber, e.getMessage());
                 bus.send("notify-bot", new JsonObject().put("errorCode", 103).put("errorMessage", e.getMessage()));
                 return Response.serverError().build();
             } finally {
@@ -209,36 +206,36 @@ public class SberResource {
 
         // process refund payment
         if (isSuccess && operation.equalsIgnoreCase("refunded")) {
-            Log.warn(String.format("--> refunded orderNumber: %d", orderNumber));
+            Log.warnf("refunded orderNumber: %d", orderNumber);
             return Response.ok().build();
         }
 
         if (isSuccess && operation.equalsIgnoreCase("approved")) {
-            Log.info(String.format("--> approved orderNumber: %d -- NOOP", orderNumber));
+            Log.infof("approved orderNumber: %d -- NOOP", orderNumber);
             return Response.ok().build();
         }
 
         // process unsuccess payment
         if (!isSuccess && operation.equalsIgnoreCase("deposited")) {
-            Log.warn(String.format("--> unsuccess deposited orderNumber: %d", orderNumber));
+            Log.warnf("unsuccess deposited orderNumber: %d", orderNumber);
             audit.setWaitOrder(orderNumber);
-            Log.info(String.format("<-- orderNumber: %d waiting for success", orderNumber));
+            Log.infof("orderNumber: %d waiting for success", orderNumber);
             return Response.ok().build();
         }
 
         // process decline payment
         if (operation.equalsIgnoreCase("declinedByTimeout")) {
-            Log.info(String.format("--> declined orderNumber: %d (%s)", orderNumber, operation));
+            Log.infof("declined orderNumber: %d (%s)", orderNumber, operation);
             try {
                 lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
                     if (order.getStatus() != 0)
                         throw new RuntimeException("order was declined at " + order.getCanceldate());
                     lbsoap.cancelPrePayment(sessionId, orderNumber);
-                    Log.info(String.format("<-- success cancel orderNumber: %d", orderNumber));
+                    Log.infof("cancelled orderNumber: %d", orderNumber);
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                Log.error(String.format("orderNumber: %d declined: %s", orderNumber, e.getMessage()));
+                Log.errorf("declined orderNumber: %d - %s", orderNumber, e.getMessage());
                 bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
                 return Response.serverError().build();
             } finally {

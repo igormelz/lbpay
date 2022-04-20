@@ -157,9 +157,7 @@ public class AuditRepository {
     public void setWaitOrder(long orderNumber) {
         client.preparedQuery("UPDATE billing.pre_payments SET comment = 'wait deposited' WHERE record_id = ?")
                 .execute(Tuple.of(orderNumber)).subscribe().with(
-                        result -> Log.info(String.format(
-                                "mark orderNumber: %d as waiting deposited",
-                                orderNumber)),
+                        result -> Log.infof("mark orderNumber: %d as waiting deposited", orderNumber),
                         failure -> Log.error(failure));
     }
 

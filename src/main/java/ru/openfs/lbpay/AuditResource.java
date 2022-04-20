@@ -62,20 +62,21 @@ public class AuditResource {
         return audit.findById(key).onItem()
                 .transform(order -> {
                     if (order == null) {
-                        Log.error(String.format("!!! re-processing order:%s not found", key));
+                        Log.errorf("re-processing order:%s not found", key);
                         throw new NotFoundException("order not found");
+
                     } else if (order.operId == null) {
-                        Log.info(String.format("--> re-processing orderNumber: %s with status: not registered",
-                                order.orderNumber));
+                        Log.infof("re-processing not registered orderNumber: %s", order.orderNumber);
                         bus.send("receipt-sale", JsonObject.mapFrom(order));
                         return "submit re-processing not registered order";
+
                     } else if (order.status.equalsIgnoreCase("ERROR")) {
-                        Log.warn(String.format("--> re-processing orderNumber: %s with status: error",
-                                order.orderNumber));
+                        Log.warnf("re-processing error orderNumber: %s", order.orderNumber);
                         bus.send("receipt-sale", JsonObject.mapFrom(order));
                         return "submit re-processing error order";
+                        
                     } else {
-                        Log.info("--> ask operation status");
+                        Log.info("need to ask operation status");
                         return "ask oper status";
                     }
                 });
@@ -94,7 +95,7 @@ public class AuditResource {
         return audit.clearOrder(orderNumber).onItem()
                 .transform(cleared -> {
                     if (cleared) {
-                        Log.info(String.format("canceled pending orderNumber: %d", orderNumber));
+                        Log.infof("orderNumber: %d cancelled", orderNumber);
                         return Response.ok().build();
                     }
                     return Response.notModified().build();

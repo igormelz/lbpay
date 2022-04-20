@@ -61,7 +61,7 @@ public class SberOnlineResource {
 
         // validate account format
         if (!account.matches("\\d+$")) {
-            Log.warn(String.format("<-- wrong format account: %s", account));
+            Log.warnf("wrong format account: %s", account);
             return producer.requestBody("direct:marshalSberOnline",
                     new SberOnlineMessage(SberOnlineCode.ACCOUNT_WRONG_FORMAT), String.class);
         }
@@ -76,7 +76,7 @@ public class SberOnlineResource {
 
         // process check acount
         if (action.equalsIgnoreCase("check")) {
-            Log.info(String.format("--> check account: %s", account));
+            Log.infof("check account: %s", account);
             // return processCheckAccount(sessionId, account);
             return producer.requestBody("direct:marshalSberOnline", processCheckAccount(sessionId, account),
                     String.class);
@@ -84,7 +84,7 @@ public class SberOnlineResource {
 
         // process payment
         if (action.equalsIgnoreCase("payment")) {
-            Log.info(String.format("--> payment orderNumber: %s, account: %s, amount: %.2f", pay_id, account, amount));
+            Log.infof("payment orderNumber: %s, account: %s, amount: %.2f", pay_id, account, amount);
             // return processPayment(sessionId, account, amount, pay_id, pay_date);
             return producer.requestBody("direct:marshalSberOnline",
                     processPayment(sessionId, account, amount, pay_id, pay_date), String.class);
@@ -118,14 +118,14 @@ public class SberOnlineResource {
 
                             // success response
                             answer.setResponse(SberOnlineCode.OK);
-                            Log.info(String.format("<-- success check account: %s", account));
+                            Log.infof("check success account: %s", account);
 
                         });
 
                 // process inactive agreement response
                 if (answer.MESSAGE == null) {
                     answer.setResponse(SberOnlineCode.ACCOUNT_INACTIVE);
-                    Log.warn(String.format("<-- check account: %s inactive", account));
+                    Log.warnf("check inactive account: %s", account);
                 }
             });
 
@@ -135,11 +135,11 @@ public class SberOnlineResource {
         } catch (RuntimeException e) {
             if (e.getMessage() != null && e.getMessage().contains("not found")) {
                 // raise not found account
-                Log.warn(String.format("<-! check account: %s not found", account));
+                Log.warnf("check account: %s not found", account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 // common error
-                Log.error("!!! check account: %s", account, e);
+                Log.errorf("check account: %s - %s", account, e.getMessage());
                 bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
@@ -156,13 +156,13 @@ public class SberOnlineResource {
         try {
             payDateTime = LocalDateTime.parse(pay_date, PAY_DATE_FMT).format(BILL_DATE_FMT);
         } catch (DateTimeException ex) {
-            Log.warn(String.format("<-- payment orderNumber: %s wrong format pay_date: %s", pay_id, ex.getMessage()));
+            Log.warnf("payment orderNumber: %s has wrong format pay_date: %s", pay_id, ex.getMessage());
             return new SberOnlineMessage(SberOnlineCode.WRONG_FORMAT_DATE);
         }
 
         // validate amount
         if (amount <= 0) {
-            Log.warn(String.format("<-- payment orderNumber: %s too small amount: %.2f", pay_id, amount));
+            Log.warnf("payment orderNumber: %s has too small amount: %.2f", pay_id, amount);
             return new SberOnlineMessage(SberOnlineCode.PAY_AMOUNT_TOO_SMALL);
         }
 
@@ -186,17 +186,17 @@ public class SberOnlineResource {
             });
 
             // return response
-            Log.info(String.format("<-- success payment orderNumber: %s, account: %s, amount: %.2f", pay_id, account, amount));
+            Log.infof("payment success orderNumber: %s, account: %s, amount: %.2f", pay_id, account, amount);
             return answer;
 
         } catch (RuntimeException e) {
 
             if (e.getMessage().contains("not found")) {
-                Log.warn(String.format("<-- payment orderNumber: %s not found account: %s", pay_id, account));
+                Log.warnf("payment orderNumber: %s not found account: %s", pay_id, account);
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
 
             } else if (e.getMessage().contains("already exists")) {
-                Log.warn(String.format("<-- payment orderNumber: %s has already processed", pay_id));
+                Log.warnf("payment orderNumber: %s has already processed", pay_id);
                 SberOnlineMessage answer = new SberOnlineMessage(SberOnlineCode.PAY_TRX_DUPLICATE);
                 lbsoap.findPayment(sessionId, pay_id).ifPresent(p -> {
                     answer.AMOUNT = p.getAmountcurr();
@@ -205,7 +205,7 @@ public class SberOnlineResource {
                 });
                 return answer;
             } else {
-                Log.error(String.format("!!! orderNumber: %s", pay_id, e));
+                Log.errorf("payment orderNumber: %s - %s", pay_id, e.getMessage());
                 bus.send("notify-bot", new JsonObject().put("orderNumber", pay_id).put("errorMessage", e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }

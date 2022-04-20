@@ -80,7 +80,7 @@ public class DreamkasResource {
             Log.error(err);
             return new RuntimeException(err);
         }
-        Log.error(String.format("!!! DK service error: %s", result.message()));
+        Log.errorf("dreamkas error: %s", result.message());
         return new RuntimeException(result.message());
     });
 
@@ -99,22 +99,22 @@ public class DreamkasResource {
         }
 
         if (!isValid) {
-            Log.error(String.format("receipt orderNumber: %s - no required email: %s or phone: %s",
-                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone")));
+            Log.errorf("orderNumber: %s has no required email: %s or phone: %s",
+                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone"));
             bus.send("notify-bot", receipt.put("errorMessage", "no required email or phone"));
             return;
         }
 
-        Log.info(String.format("<-- receipt orderNumber: %s", receipt.getString("orderNumber")));
+        Log.infof("receipt orderNumber: %s", receipt.getString("orderNumber"));
         client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
                 .sendJson(createReceipt(receipt)).subscribe().with(response -> {
                     JsonObject operation = response.bodyAsJsonObject();
-                    Log.info(String.format("--> %s receipt orderNumber: %s, operation: %s",
+                    Log.infof("receipt %s orderNumber: %s, operation: %s",
                             operation.getString("status").toLowerCase(), receipt.getString("orderNumber"),
-                            operation.getString("id")));
+                            operation.getString("id"));
                     audit.setOperation(operation);
                 }, err -> {
-                    Log.error(String.format("receipt orderNumber: %s", receipt.getString("orderNumber")), err);
+                    Log.errorf("receipt orderNumber: %s - %s", receipt.getString("orderNumber"), err.getMessage());
                     bus.send("notify-bot", receipt.put("errorMessage", err.getMessage()));
                 });
     }
@@ -128,25 +128,25 @@ public class DreamkasResource {
         if (message.getString("type").equalsIgnoreCase("OPERATION")) {
             AuditRecord order = audit.findById(data.getString("externalId")).await().indefinitely();
             if (order == null) {
-                Log.warn(String.format("??? not found order by externalId: %s", data.encodePrettily()));
+                Log.warnf("??? not found order by externalId: %s", data.encodePrettily());
                 return;
             }
 
             if (data.getString("status").equalsIgnoreCase("ERROR")) {
-                Log.error(String.format("!!! receipt orderNumber: %s - %s", order.orderNumber,
-                        data.getJsonObject("data").getJsonObject("error").getString("message")));
+                Log.errorf("receipt orderNumber: %s - %s", order.orderNumber,
+                        data.getJsonObject("data").getJsonObject("error").getString("message"));
                 bus.send("notify-bot", data.put("orderNumber", order.orderNumber));
 
             } else {
-                Log.info(String.format("--> %s receipt orderNumber: %s, operation: %s",
+                Log.infof("receipt %s orderNumber: %s, operation: %s",
                         data.getString("status").toLowerCase(),
-                        order.orderNumber, data.getString("id")));
+                        order.orderNumber, data.getString("id"));
             }
             audit.processOperation(data);
 
         } else if (message.getString("type").equalsIgnoreCase("RECEIPT")) {
-            Log.info(String.format("--> ofd receipt shift: %d, doc: %s", data.getLong("shiftId"),
-                    data.getString("fiscalDocumentNumber")));
+            Log.infof("receipt ofd shift: %d, doc: %s", data.getLong("shiftId"),
+                    data.getString("fiscalDocumentNumber"));
         }
     }
 
