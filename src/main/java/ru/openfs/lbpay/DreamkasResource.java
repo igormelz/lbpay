@@ -19,14 +19,17 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.transaction.Transactional;
 import javax.ws.rs.Consumes;
+import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
+import javax.ws.rs.PathParam;
 import javax.ws.rs.core.MediaType;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
 import io.quarkus.vertx.ConsumeEvent;
+import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -166,4 +169,10 @@ public class DreamkasResource {
                 .put("total", new JsonObject().put("priceSum", price));
     }
 
+    @GET
+    @Path("operation/{id}")
+    public Uni<JsonObject> getOperation(@PathParam("id") String operId) {
+        return client.get("/api/operations/" + operId).putHeader("Authorization", "Bearer " + token).send()
+                .onItem().transform(HttpResponse::bodyAsJsonObject);
+    }
 }
