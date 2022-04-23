@@ -102,24 +102,22 @@ public class DreamkasResource {
         }
 
         if (!isValid) {
-            Log.errorf("orderNumber: %s has no required email: %s or phone: %s",
-                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone"));
-            bus.send("notify-bot", receipt.put("errorMessage", "no required email or phone"));
-            return;
+            bus.send("notify-error", String.format("orderNumber: %s has no required email: %s or phone: %s",
+                    receipt.getString("orderNumber"), receipt.getString("email"), receipt.getString("phone")));
+        } else {
+            Log.infof("receipt orderNumber: %s", receipt.getString("orderNumber"));
+            client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
+                    .sendJson(createReceipt(receipt)).subscribe().with(response -> {
+                        JsonObject operation = response.bodyAsJsonObject();
+                        Log.infof("receipt %s orderNumber: %s, operation: %s",
+                                operation.getString("status").toLowerCase(), receipt.getString("orderNumber"),
+                                operation.getString("id"));
+                        audit.setOperation(operation);
+                    }, err -> {
+                        bus.send("notify-error", String.format("receipt orderNumber: %s - %s",
+                                receipt.getString("orderNumber"), err.getMessage()));
+                    });
         }
-
-        Log.infof("receipt orderNumber: %s", receipt.getString("orderNumber"));
-        client.post("/api/receipts").expect(predicate).putHeader("Authorization", "Bearer " + token)
-                .sendJson(createReceipt(receipt)).subscribe().with(response -> {
-                    JsonObject operation = response.bodyAsJsonObject();
-                    Log.infof("receipt %s orderNumber: %s, operation: %s",
-                            operation.getString("status").toLowerCase(), receipt.getString("orderNumber"),
-                            operation.getString("id"));
-                    audit.setOperation(operation);
-                }, err -> {
-                    Log.errorf("receipt orderNumber: %s - %s", receipt.getString("orderNumber"), err.getMessage());
-                    bus.send("notify-bot", receipt.put("errorMessage", err.getMessage()));
-                });
     }
 
     @POST
@@ -136,9 +134,8 @@ public class DreamkasResource {
             }
 
             if (data.getString("status").equalsIgnoreCase("ERROR")) {
-                Log.errorf("receipt orderNumber: %s - %s", order.orderNumber,
-                        data.getJsonObject("data").getJsonObject("error").getString("message"));
-                bus.send("notify-bot", data.put("orderNumber", order.orderNumber));
+                bus.send("notify-error", String.format("receipt orderNumber: %s - %s", order.orderNumber,
+                        data.getJsonObject("data").getJsonObject("error").getString("message")));
 
             } else {
                 Log.infof("receipt %s orderNumber: %s, operation: %s",

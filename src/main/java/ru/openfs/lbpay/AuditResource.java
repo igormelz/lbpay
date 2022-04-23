@@ -16,6 +16,7 @@
 package ru.openfs.lbpay;
 
 import javax.inject.Inject;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.NotFoundException;
 import javax.ws.rs.PUT;
@@ -24,14 +25,13 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.ResponseBuilder;
+import javax.ws.rs.core.Response.Status;
 
 import io.quarkus.logging.Log;
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import ru.openfs.lbpay.model.AuditOrder;
-import ru.openfs.lbpay.model.AuditRecord;
 
 @Path("/audit")
 public class AuditResource {
@@ -43,20 +43,24 @@ public class AuditResource {
     EventBus bus;
 
     @GET
-    @Path("order")
-    public Multi<AuditRecord> getOrders() {
-        return audit.findAll();
+    @Path("operation/{key}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Uni<Response> getOperation(@PathParam("key") String key) {
+        return audit.findById(key)
+                .onItem().transform(oper -> oper != null ? Response.ok(oper) : Response.status(Status.NOT_FOUND))
+                .onItem().transform(ResponseBuilder::build);
     }
 
-    @GET
-    @Path("order/{key}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Uni<AuditRecord> order(@PathParam("key") String key) {
-        return audit.findById(key);
+    @DELETE
+    @Path("operation/{key}")
+    public Uni<Response> deleteOper(@PathParam("key") String key) {
+        return audit.deleteOperation(key)
+                .onItem().transform(deleted -> deleted ? Status.NO_CONTENT : Status.NOT_FOUND)
+                .onItem().transform(status -> Response.status(status).build());
     }
 
     @PUT
-    @Path("order/{key}")
+    @Path("operation/{key}")
     @Produces(MediaType.TEXT_PLAIN)
     public Uni<String> receiptOrder(@PathParam("key") String key) {
         return audit.findById(key).onItem()
@@ -74,31 +78,11 @@ public class AuditResource {
                         Log.warnf("re-processing error orderNumber: %s", order.orderNumber);
                         bus.send("receipt-sale", JsonObject.mapFrom(order));
                         return "submit re-processing error order";
-                        
+
                     } else {
                         Log.info("need to ask operation status");
                         return "ask oper status";
                     }
-                });
-    }
-
-    @GET
-    @Path("pending")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Multi<AuditOrder> pending() {
-        return audit.getPendingOrders();
-    }
-
-    @PUT
-    @Path("cancel/{orderNumber}")
-    public Uni<Response> clearPendingOrder(@PathParam("orderNumber") long orderNumber) {
-        return audit.clearOrder(orderNumber).onItem()
-                .transform(cleared -> {
-                    if (cleared) {
-                        Log.infof("orderNumber: %d cancelled", orderNumber);
-                        return Response.ok().build();
-                    }
-                    return Response.notModified().build();
                 });
     }
 

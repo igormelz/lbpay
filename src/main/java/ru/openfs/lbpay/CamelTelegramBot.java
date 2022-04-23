@@ -15,13 +15,17 @@
  */
 package ru.openfs.lbpay;
 
+import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import static org.apache.camel.builder.endpoint.StaticEndpointBuilders.telegram;
+import static org.apache.camel.builder.endpoint.StaticEndpointBuilders.direct;
+
 @Singleton
-public class CamelSendMessage extends RouteBuilder {
+public class CamelTelegramBot extends RouteBuilder {
 
     @ConfigProperty(name = "telegram.token", defaultValue = "TOKEN")
     String token;
@@ -29,10 +33,17 @@ public class CamelSendMessage extends RouteBuilder {
     @ConfigProperty(name = "telegram.chatid", defaultValue = "123456789")
     String chatId;
 
+    @Inject
+    BotCommandProcessor commandProcessor;
+
     @Override
     public void configure() throws Exception {
-        from("direct:sendMessage").routeId("SendBotMessage")
-                .toF("telegram:bots?authorizationToken=%s&chatId=%s", token, chatId);
+
+        from(telegram("bots").authorizationToken(token)).routeId("BotCallbackRoute")
+        .process(commandProcessor);
+
+        from(direct("sendMessage")).routeId("SendBotMessage")
+                .to(telegram("bots").authorizationToken(token).chatId(chatId));
     }
 
 }

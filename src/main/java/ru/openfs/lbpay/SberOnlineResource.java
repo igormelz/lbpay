@@ -27,6 +27,7 @@ import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.MediaType;
 
+import org.apache.camel.Produce;
 import org.apache.camel.ProducerTemplate;
 
 import io.quarkus.logging.Log;
@@ -49,7 +50,7 @@ public class SberOnlineResource {
     @Inject
     AuditRepository audit;
 
-    @Inject
+    @Produce("direct:marshalSberOnline")
     ProducerTemplate producer;
 
     @GET
@@ -62,7 +63,7 @@ public class SberOnlineResource {
         // validate account format
         if (!account.matches("\\d+$")) {
             Log.warnf("wrong format account: %s", account);
-            return producer.requestBody("direct:marshalSberOnline",
+            return producer.requestBody(
                     new SberOnlineMessage(SberOnlineCode.ACCOUNT_WRONG_FORMAT), String.class);
         }
 
@@ -70,7 +71,7 @@ public class SberOnlineResource {
         String sessionId = lbsoap.login();
         if (sessionId == null) {
             // return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
-            return producer.requestBody("direct:marshalSberOnline", new SberOnlineMessage(SberOnlineCode.TMP_ERR),
+            return producer.requestBody(new SberOnlineMessage(SberOnlineCode.TMP_ERR),
                     String.class);
         }
 
@@ -78,7 +79,7 @@ public class SberOnlineResource {
         if (action.equalsIgnoreCase("check")) {
             Log.infof("check account: %s", account);
             // return processCheckAccount(sessionId, account);
-            return producer.requestBody("direct:marshalSberOnline", processCheckAccount(sessionId, account),
+            return producer.requestBody(processCheckAccount(sessionId, account),
                     String.class);
         }
 
@@ -86,13 +87,13 @@ public class SberOnlineResource {
         if (action.equalsIgnoreCase("payment")) {
             Log.infof("payment orderNumber: %s, account: %s, amount: %.2f", pay_id, account, amount);
             // return processPayment(sessionId, account, amount, pay_id, pay_date);
-            return producer.requestBody("direct:marshalSberOnline",
+            return producer.requestBody(
                     processPayment(sessionId, account, amount, pay_id, pay_date), String.class);
         }
 
         // raise error
         // return new SberOnlineMessage(SberOnlineCode.WRONG_ACTION);
-        return producer.requestBody("direct:marshalSberOnline", new SberOnlineMessage(SberOnlineCode.WRONG_ACTION),
+        return producer.requestBody(new SberOnlineMessage(SberOnlineCode.WRONG_ACTION),
                 String.class);
     }
 
@@ -139,8 +140,7 @@ public class SberOnlineResource {
                 return new SberOnlineMessage(SberOnlineCode.ACCOUNT_NOT_FOUND);
             } else {
                 // common error
-                Log.errorf("check account: %s - %s", account, e.getMessage());
-                bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
+                bus.send("notify-error", String.format("check account: %s - %s", account, e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {
@@ -205,8 +205,7 @@ public class SberOnlineResource {
                 });
                 return answer;
             } else {
-                Log.errorf("payment orderNumber: %s - %s", pay_id, e.getMessage());
-                bus.send("notify-bot", new JsonObject().put("orderNumber", pay_id).put("errorMessage", e.getMessage()));
+                bus.send("notify-error", String.format("payment orderNumber: %s - %s", pay_id, e.getMessage()));
                 return new SberOnlineMessage(SberOnlineCode.TMP_ERR);
             }
         } finally {

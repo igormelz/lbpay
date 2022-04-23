@@ -23,16 +23,14 @@ import javax.ws.rs.FormParam;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
-import javax.ws.rs.PathParam;
-import javax.ws.rs.Produces;
 import javax.ws.rs.QueryParam;
-import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
+import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.client.WebClientOptions;
@@ -133,8 +131,7 @@ public class SberResource {
                             return Response.seeOther(URI.create(item.getString("formUrl"))).build();
                         }
                         if (item.containsKey("errorCode")) {
-                            Log.errorf("orderNumber: %d checkout: %s", orderNumber, item.getString("errorMessage"));
-                            bus.send("notify-bot", new JsonObject().put("errorCode", 102).put("errorMessage",
+                            bus.send("notify-error", String.format("orderNumber: %d checkout: %s", orderNumber,
                                     item.getString("errorMessage")));
                         }
                         return Response.status(Status.BAD_REQUEST).build();
@@ -196,8 +193,7 @@ public class SberResource {
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                Log.errorf("orderNumber: %d deposited: %s", orderNumber, e.getMessage());
-                bus.send("notify-bot", new JsonObject().put("errorCode", 103).put("errorMessage", e.getMessage()));
+                bus.send("notify-error", String.format("orderNumber: %d deposited: %s", orderNumber, e.getMessage()));
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -235,8 +231,7 @@ public class SberResource {
                 });
                 return Response.ok().build();
             } catch (RuntimeException e) {
-                Log.errorf("declined orderNumber: %d - %s", orderNumber, e.getMessage());
-                bus.send("notify-bot", new JsonObject().put("error", e.getMessage()));
+                bus.send("notify-error", String.format("declined orderNumber: %d - %s", orderNumber, e.getMessage()));
                 return Response.serverError().build();
             } finally {
                 lbsoap.logout(sessionId);
@@ -264,15 +259,13 @@ public class SberResource {
                 .onItem().transform(HttpResponse::bodyAsJsonObject);
     }
 
-    @GET
-    @Path("sber/status/{orderNumber}")
-    @Produces(MediaType.APPLICATION_JSON)
-    public Uni<JsonObject> getSberOrderStatus(@PathParam("orderNumber") long orderNumber) {
+    @ConsumeEvent(value = "sber-payment-status")
+    public Uni<JsonObject> getSberOrderStatus(String orderNumber) {
         return client.post("/payment/rest/getOrderStatusExtended.do")
                 .sendForm(MultiMap.caseInsensitiveMultiMap()
                         .set("userName", userName)
                         .set("password", userPass)
-                        .set("orderNumber", String.valueOf(orderNumber)))
+                        .set("orderNumber", orderNumber))
                 .onItem().transform(HttpResponse::bodyAsJsonObject);
     }
 

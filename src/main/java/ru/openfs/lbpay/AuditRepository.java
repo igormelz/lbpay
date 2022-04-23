@@ -23,7 +23,6 @@ import org.apache.camel.ProducerTemplate;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
-import io.quarkus.vertx.ConsumeEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.vertx.core.json.JsonObject;
@@ -72,11 +71,6 @@ public class AuditRepository {
                 .await().indefinitely();
     }
 
-    @ConsumeEvent(value = "notify-bot", blocking = true)
-    public void notifyBot(JsonObject msgObject) {
-        producer.sendBody("direct:sendMessage", msgObject.encode());
-    }
-
     public void setOrder(JsonObject order) {
         client.preparedQuery(
                 "INSERT ReceiptOperation SET mdOrder = ?, orderNumber = ?, account = ?, amount = ?, email = ?, phone = ?")
@@ -91,8 +85,7 @@ public class AuditRepository {
 
     public Uni<AuditRecord> findById(String key) {
         return client
-                .preparedQuery(
-                        "SELECT * FROM ReceiptOperation WHERE mdOrder = ?")
+                .preparedQuery("SELECT * FROM ReceiptOperation WHERE mdOrder = ?")
                 .execute(Tuple.of(key))
                 .onItem().transform(set -> set.iterator())
                 .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null);
@@ -116,6 +109,11 @@ public class AuditRepository {
                             operation.getString("externalId")))
                     .await().indefinitely();
         }
+    }
+
+    public Uni<Boolean> deleteOperation(String mdOrder) {
+        return client.preparedQuery("DELETE FROM ReceiptOperation WHERE mdOrder = ?").execute(Tuple.of(mdOrder))
+        .onItem().transform(rowSet -> rowSet.rowCount() == 1);
     }
 
     public Multi<AuditRecord> findAll() {
@@ -161,12 +159,12 @@ public class AuditRepository {
                         failure -> Log.error(failure));
     }
 
-    public Uni<Boolean> clearOrder(long orderNumber) {
+    public Uni<Boolean> clearOrder(String orderNumber) {
         return client.preparedQuery("UPDATE billing.pre_payments " +
                 "SET cancel_date = CURRENT_TIMESTAMP, comment = CONCAT(comment,':CLEAR'), status = 2 " +
-                "WHERE record_id = ?")
+                "WHERE record_id = ? AND status = 0")
                 .execute(Tuple.of(orderNumber))
-                .onItem().transform(row -> row.rowCount() == 1);
+                .onItem().transform(rowSet -> rowSet.rowCount() == 1);
     }
 
 }

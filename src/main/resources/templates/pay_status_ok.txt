@@ -1,0 +1,3 @@
+💳 Заказ #{orderNumber} 🆗 {status}
+💬 {message}
+✅ /process_payment_{orderNumber}

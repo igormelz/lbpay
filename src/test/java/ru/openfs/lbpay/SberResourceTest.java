@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import io.quarkus.test.junit.QuarkusTest;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.CoreMatchers.containsString;
+//import static org.hamcrest.CoreMatchers.containsString;
 
 @QuarkusTest
 public class SberResourceTest {
@@ -81,16 +81,16 @@ public class SberResourceTest {
                 .statusCode(400);
     }
 
-    @Test
-    public void testCheckoutOk() {
-        given()
-                .redirects().follow(false)
-                .urlEncodingEnabled(true)
-                .param("uid", "111111").and()
-                .param("amount", 10.01)
-                .when().post("/pay/checkout")
-                .then()
-                .statusCode(303)
-                .header("Location", containsString("sberbank.ru"));
-    }
+    // @Test
+    // public void testCheckoutOk() {
+    //     given()
+    //             .redirects().follow(false)
+    //             .urlEncodingEnabled(true)
+    //             .param("uid", "111111").and()
+    //             .param("amount", 10.01)
+    //             .when().post("/pay/checkout")
+    //             .then()
+    //             .statusCode(303)
+    //             .header("Location", containsString("sberbank.ru"));
+    // }
 }

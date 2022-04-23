@@ -1,0 +1,5 @@
+🧾 Статус регистрации чека для заказа #{receipt.orderNumber} {#if receipt.status}{receipt.status}{#else}❌ NO REG{/if}
+🕐 {time:format(receipt.createAt,"d MMM uuuu HH:mm:ss")}
+
+{#if receipt.status == null}✅ /register_{receipt.orderNumber}{/if}
+{#if receipt.operId}🔁 /get_oper_status_{receipt.operId}{/if}
