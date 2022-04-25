@@ -1,5 +1,8 @@
-🧾 Статус регистрации чека для заказа #{receipt.orderNumber} {#if receipt.status}{receipt.status}{#else}❌ NO REG{/if}
+{#if receipt.status is 'PENDING'}⌛️ PENDING {#else if receipt.status is 'IN_PROGRESS'}⚙️ IN PROGRESS {#else if receipt.status is 'ERROR'}‼️ ERROR {#else}❌ NO REG {/if}🧾
+
+💳 Заказ #{receipt.orderNumber}
 🕐 {time:format(receipt.createAt,"d MMM uuuu HH:mm:ss")}
 
-{#if receipt.status == null}✅ /register_{receipt.orderNumber}{/if}
-{#if receipt.operId}🔁 /get_oper_status_{receipt.operId}{/if}
+{#if receipt.status == null || receipt.status is 'ERROR'}✅ /register_{receipt.orderNumber}{/if}
+🚮 /cancel_register_{receipt.orderNumber}
+{#if receipt.operId}🔁 /register_status_{receipt.operId}{/if}

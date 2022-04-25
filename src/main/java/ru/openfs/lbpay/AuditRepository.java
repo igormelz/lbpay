@@ -66,7 +66,8 @@ public class AuditRepository {
                         "orderNumber VARCHAR(64)," +
                         "phone VARCHAR(255)," +
                         "status VARCHAR(64)," +
-                        "PRIMARY KEY (mdOrder))")
+                        "PRIMARY KEY (mdOrder)," +
+                        "INDEX idx_order (orderNumber))")
                         .execute())
                 .await().indefinitely();
     }
@@ -111,9 +112,18 @@ public class AuditRepository {
         }
     }
 
-    public Uni<Boolean> deleteOperation(String mdOrder) {
-        return client.preparedQuery("DELETE FROM ReceiptOperation WHERE mdOrder = ?").execute(Tuple.of(mdOrder))
+    public Uni<Boolean> deleteOperation(String orderNumber) {
+        return client.preparedQuery("DELETE FROM ReceiptOperation WHERE orderNumber = ?").execute(Tuple.of(orderNumber))
         .onItem().transform(rowSet -> rowSet.rowCount() == 1);
+    }
+
+
+    public Uni<AuditRecord> findByOrderNumber(String orderNumber) {
+        return client
+                .preparedQuery("SELECT * FROM ReceiptOperation WHERE orderNumber = ?")
+                .execute(Tuple.of(orderNumber))
+                .onItem().transform(set -> set.iterator())
+                .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null);
     }
 
     public Multi<AuditRecord> findAll() {

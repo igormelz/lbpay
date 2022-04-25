@@ -19,6 +19,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.component.telegram.TelegramConstants;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import static org.apache.camel.builder.endpoint.StaticEndpointBuilders.telegram;
@@ -40,10 +41,12 @@ public class CamelTelegramBot extends RouteBuilder {
     public void configure() throws Exception {
 
         from(telegram("bots").authorizationToken(token)).routeId("BotCallbackRoute")
-        .process(commandProcessor);
+                .process(commandProcessor);
 
         from(direct("sendMessage")).routeId("SendBotMessage")
-                .to(telegram("bots").authorizationToken(token).chatId(chatId));
+                .setHeader(TelegramConstants.TELEGRAM_PARSE_MODE, constant("HTML"))
+                .to(telegram("bots").authorizationToken(token).chatId(chatId))
+                ;
     }
 
 }

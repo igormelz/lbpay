@@ -19,7 +19,6 @@ import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 import javax.transaction.Transactional;
 import javax.ws.rs.Consumes;
-import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
@@ -166,8 +165,7 @@ public class DreamkasResource {
                 .put("total", new JsonObject().put("priceSum", price));
     }
 
-    @GET
-    @Path("operation/{id}")
+    @ConsumeEvent("dk-register-status")
     public Uni<JsonObject> getOperation(@PathParam("id") String operId) {
         return client.get("/api/operations/" + operId).putHeader("Authorization", "Bearer " + token).send()
                 .onItem().transform(HttpResponse::bodyAsJsonObject);
