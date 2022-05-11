@@ -1,3 +1,3 @@
 <b>Заказ:</b> #{receipt.orderNumber}
 <b>Создан:</b> {time:format(receipt.createAt,"d MMM uuuu HH:mm:ss")}
-<b>Статус:</b> {#if receipt.status is 'PENDING'}⌛️ PENDING {#else if receipt.status is 'IN_PROGRESS'}⚙️ IN PROGRESS {#else if receipt.status is 'ERROR'}‼️ ERROR {#else}❌ NO REG {/if}
+<b>Статус:</b> {#if receipt.status } {receipt.status} {#else}❌ NO REG {/if}

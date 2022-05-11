@@ -39,10 +39,11 @@ public class BotCommandProcessor implements Processor {
     private static final String CMD_RECEIPT_STATUS = "receipt_status";
     private static final String CMD_CANCEL_RECEIPT = "cancel_receipt";
 
-    // private static final InlineKeyboardMarkup KM_CLEAR = InlineKeyboardMarkup.builder()
-    //         .addRow(Arrays.asList(InlineKeyboardButton.builder().text("✅ Done")
-    //                 .callbackData(CMD_CLEAR_MSG).build()))
-    //         .build();
+    // private static final InlineKeyboardMarkup KM_CLEAR =
+    // InlineKeyboardMarkup.builder()
+    // .addRow(Arrays.asList(InlineKeyboardButton.builder().text("✅ Done")
+    // .callbackData(CMD_CLEAR_MSG).build()))
+    // .build();
 
     @Produce("direct:sendMessage")
     ProducerTemplate producer;
@@ -141,7 +142,7 @@ public class BotCommandProcessor implements Processor {
                         producer.sendBody(EditMessageTextMessage.builder()
                                 .messageId(messageId)
                                 .text("💳 Заказ #" + orderNumber + " 🆗 оплачен")
-                                //.replyMarkup(KM_CLEAR)
+                                // .replyMarkup(KM_CLEAR)
                                 .build());
                     else
                         producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
@@ -159,12 +160,6 @@ public class BotCommandProcessor implements Processor {
                         bus.send("receipt-sale", JsonObject.mapFrom(order));
                     }
                 });
-        // display receipt
-        audit.findByOrderNumber(orderNumber).subscribe().with(receipt -> {
-            producer.sendBody(EditMessageTextMessage.builder().messageId(messageId)
-                    .text(Templates.receipt(receipt).render()).parseMode("HTML")
-                    .replyMarkup(receiptKeyboardMarkup(receipt)).build());
-        });
     }
 
     private InlineKeyboardMarkup receiptKeyboardMarkup(AuditRecord receipt) {
@@ -173,13 +168,17 @@ public class BotCommandProcessor implements Processor {
 
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
                 .text("🚮 Отмена").callbackData(CMD_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
-        
+
         InlineKeyboardButton btnStatus = InlineKeyboardButton.builder()
                 .text("🔁 Status").callbackData(CMD_RECEIPT_STATUS + ":" + receipt.operId).build();
 
         if (receipt.operId == null || receipt.status.equalsIgnoreCase("ERROR")) {
             return InlineKeyboardMarkup.builder()
-                    .addRow(Arrays.asList(btnReg, btnCancel))
+                    .addRow(Arrays.asList(btnReg, btnStatus, btnCancel))
+                    .build();
+        } else if (receipt.status.equalsIgnoreCase("SUCCESS")) {
+            return InlineKeyboardMarkup.builder()
+                    .addRow(Arrays.asList(btnCancel))
                     .build();
         } else {
             return InlineKeyboardMarkup.builder()
@@ -237,7 +236,7 @@ public class BotCommandProcessor implements Processor {
                         producer.sendBody(EditMessageTextMessage.builder()
                                 .messageId(messageId)
                                 .text("💳 Заказ #" + orderNumber + " 🚮 отменен")
-                                //.replyMarkup(KM_CLEAR)
+                                // .replyMarkup(KM_CLEAR)
                                 .build());
                     else
                         producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
