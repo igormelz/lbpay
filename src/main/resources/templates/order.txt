@@ -1,4 +1,4 @@
-💳 Заказ #{order.orderNumber} 
-🕐 {time:format(order.payDate, "d MMM uuuu HH:mm:ss")}
-{#if order.comments}💬 {order.comments}{/if}
-🔁 /payment_status_{order.orderNumber}
+<b>Заказ:</b> #{order.orderNumber} 
+<b>Создан:</b> {time:format(order.payDate, "d MMM uuuu HH:mm:ss")}
+🕐 {order.diff} seconds ago
+{#if order.comments}💬 <i>{order.comments}</i>{/if}

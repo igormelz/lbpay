@@ -1,3 +1,0 @@
-💳 Заказ #{orderNumber} ❌ {status}
-💬 {message} 
-🚮 /cancel_order_{orderNumber}

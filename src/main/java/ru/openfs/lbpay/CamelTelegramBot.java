@@ -41,7 +41,8 @@ public class CamelTelegramBot extends RouteBuilder {
     public void configure() throws Exception {
 
         from(telegram("bots").authorizationToken(token)).routeId("BotCallbackRoute")
-                .process(commandProcessor);
+            .filter(body().isNull()).stop().end()
+            .process(commandProcessor);
 
         from(direct("sendMessage")).routeId("SendBotMessage")
                 .setHeader(TelegramConstants.TELEGRAM_PARSE_MODE, constant("HTML"))

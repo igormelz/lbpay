@@ -259,6 +259,12 @@ public class SberResource {
                 .onItem().transform(HttpResponse::bodyAsJsonObject);
     }
 
+    @ConsumeEvent(value = "lb-payment", blocking = true)
+    public Uni<Boolean> doLbPayment(JsonObject paymentInfo) {
+        return Uni.createFrom().item(callback(paymentInfo.getString("mdOrder"),
+                Long.valueOf(paymentInfo.getString("orderNumber")), "deposited", 1).getStatus() == 200);
+    }
+
     @ConsumeEvent(value = "sber-payment-status")
     public Uni<JsonObject> getSberOrderStatus(String orderNumber) {
         return client.post("/payment/rest/getOrderStatusExtended.do")

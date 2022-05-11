@@ -9,11 +9,7 @@ import ru.openfs.lbpay.model.AuditRecord;
 public class Templates {
     public static native TemplateInstance order(AuditOrder order);
 
-    public static native TemplateInstance pay_status_notfound(String orderNumber, String message);
-
-    public static native TemplateInstance pay_status_ok(String status, String orderNumber, String message);
-
-    public static native TemplateInstance pay_status_fail(String status, String orderNumber, String message);
+    public static native TemplateInstance pay_status(String icon, String status, String orderNumber, String message);
 
     public static native TemplateInstance receipt(AuditRecord receipt);
 
