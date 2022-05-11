@@ -39,12 +39,6 @@ public class BotCommandProcessor implements Processor {
     private static final String CMD_RECEIPT_STATUS = "receipt_status";
     private static final String CMD_CANCEL_RECEIPT = "cancel_receipt";
 
-    // private static final InlineKeyboardMarkup KM_CLEAR =
-    // InlineKeyboardMarkup.builder()
-    // .addRow(Arrays.asList(InlineKeyboardButton.builder().text("✅ Done")
-    // .callbackData(CMD_CLEAR_MSG).build()))
-    // .build();
-
     @Produce("direct:sendMessage")
     ProducerTemplate producer;
 
@@ -142,7 +136,6 @@ public class BotCommandProcessor implements Processor {
                         producer.sendBody(EditMessageTextMessage.builder()
                                 .messageId(messageId)
                                 .text("💳 Заказ #" + orderNumber + " 🆗 оплачен")
-                                // .replyMarkup(KM_CLEAR)
                                 .build());
                     else
                         producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
