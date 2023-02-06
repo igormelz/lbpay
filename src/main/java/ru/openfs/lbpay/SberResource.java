@@ -161,12 +161,13 @@ public class SberResource {
 
         // process payment
         if (isSuccess && operation.equalsIgnoreCase("deposited")) {
-            Log.infof("deposited orderNumber: %d", orderNumber);
+            Log.debugf("deposited orderNumber: %d", orderNumber);
             try {
                 lbsoap.findOrderNumber(sessionId, orderNumber).ifPresent(order -> {
 
                     if (order.getStatus() != 0)
-                        throw new RuntimeException("order was deposited at " + order.getPaydate());
+                        throw new RuntimeException(
+                                "orderNumber: " + orderNumber + " was deposited at " + order.getPaydate());
 
                     // process payment
                     lbsoap.confirmPrePayment(sessionId, orderNumber, order.getAmount(), mdOrder);
@@ -176,7 +177,7 @@ public class SberResource {
                         // get agreement
                         acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
                                 .ifPresent(agrm -> {
-                                    Log.infof("deposited success orderNumber: %d, account: %s, amount: %.2f",
+                                    Log.infof("deposited orderNumber: %d, account: %s, amount: %.2f",
                                             orderNumber, agrm.getNumber(), order.getAmount());
                                     // build message
                                     JsonObject receipt = new JsonObject().put("amount", order.getAmount())
