@@ -6,12 +6,12 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import ru.openfs.lbpay.dto.yookassa.YookassaPaymentRequest;
-import ru.openfs.lbpay.dto.yookassa.YookassaPaymentResponse;
+import ru.openfs.lbpay.dto.yookassa.YookassaPayment;
 
 @RegisterRestClient(configKey = "YooKassa")
 @RegisterClientHeaders(YookassaHeaderFactory.class)
 public interface YookassaClient {
     @POST
     @Path("/v3/payments")
-    YookassaPaymentResponse payments(YookassaPaymentRequest request);
+    YookassaPayment payments(YookassaPaymentRequest request);
 }

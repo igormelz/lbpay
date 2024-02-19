@@ -21,10 +21,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
-import io.quarkus.arc.runtime.BeanContainer.Instance;
 import io.quarkus.logging.Log;
 import jakarta.inject.Inject;
-import jakarta.inject.Qualifier;
 import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
