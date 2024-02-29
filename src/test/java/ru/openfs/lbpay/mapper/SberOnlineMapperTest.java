@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Marshaller;
-import ru.openfs.lbpay.dto.sberonline.SberOnlineMessage;
+import ru.openfs.lbpay.dto.sberonline.Message;
 import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.model.SberOnlineCheckResponse;
 import ru.openfs.lbpay.model.SberOnlinePaymentResponse;
@@ -62,8 +62,8 @@ class SberOnlineMapperTest {
 
     @Test
     void testMarshalXML() throws Exception {
-            var so = new SberOnlineMessage(SberOnlineResponseCode.BACKEND_ERR);
-            JAXBContext context = JAXBContext.newInstance(SberOnlineMessage.class);
+            var so = new Message(SberOnlineResponseCode.BACKEND_ERR);
+            JAXBContext context = JAXBContext.newInstance(Message.class);
             Marshaller mar = context.createMarshaller();
             mar.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, Boolean.TRUE);
             StringWriter sw = new StringWriter();

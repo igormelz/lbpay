@@ -55,7 +55,7 @@ public class CheckoutResource {
 
     @GET
     public RestResponse<Void> checkAccount(@QueryParam("uid") String account) {
-        if (account != null && account.matches(accountPattern) && checkoutService.processCheckAccount(account))
+        if (account != null && account.matches(accountPattern) && checkoutService.isActiveAccount(account))
             return RestResponse.noContent();
         return RestResponse.status(Status.BAD_REQUEST);
     }

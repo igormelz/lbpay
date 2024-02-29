@@ -18,7 +18,7 @@ public class PaymentService {
     LbCoreSoapClient lbSoapService;
 
     @Inject
-    EventBus bus;
+    EventBus eventBus;
 
     protected String getSession() {
         return Optional.ofNullable(lbSoapService.login())
@@ -51,17 +51,13 @@ public class PaymentService {
                 Log.infof("paid orderNumber:[%d], account:[%s], amount:[%.2f]",
                         orderNumber, agrm.getNumber(), order.getAmount());
 
-                var receiptOrder = new ReceiptOrder(
-                        order.getAmount(), String.valueOf(orderNumber), agrm.getNumber(), mdOrder,
-                        new ReceiptCustomerInfo(acct.getAccount().getEmail(), acct.getAccount().getMobile()));
-                // make checkpoint
-                // audit.setOrder(receiptOrder);
-                // notify ofd
-                // bus.send("receipt-sale", receiptOrder);
+                eventBus.send("register-receipt", new ReceiptOrder(
+                    order.getAmount(), String.valueOf(orderNumber), agrm.getNumber(), mdOrder,
+                    new ReceiptCustomerInfo(acct.getAccount().getEmail(), acct.getAccount().getMobile())));
             }
 
         } catch (RuntimeException e) {
-            bus.send("notify-error", String.format("orderNumber:[%d] deposited: %s", orderNumber, e.getMessage()));
+            eventBus.send("notify-error", String.format("orderNumber:[%d] deposited: %s", orderNumber, e.getMessage()));
             throw new PaymentException(e.getMessage());
         } finally {
             lbSoapService.logout(sessionId);
@@ -89,7 +85,7 @@ public class PaymentService {
             }
 
         } catch (RuntimeException e) {
-            bus.send("notify-error", String.format("orderNumber:[%d] declined: %s", orderNumber, e.getMessage()));
+            eventBus.send("notify-error", String.format("orderNumber:[%d] declined: %s", orderNumber, e.getMessage()));
             throw new PaymentException(e.getMessage());
         } finally {
             lbSoapService.logout(sessionId);

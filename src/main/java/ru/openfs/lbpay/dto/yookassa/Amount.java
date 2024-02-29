@@ -1,6 +1,6 @@
 package ru.openfs.lbpay.dto.yookassa;
 
-public record YookassaAmount(
+public record Amount(
     String value,
     String currency
 ) {}

@@ -2,7 +2,7 @@ package ru.openfs.lbpay.dto.yookassa;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public record YookassaMetaData(
+public record MetaData(
     @JsonProperty("payment_id") String paymentId
 ) {   
 }

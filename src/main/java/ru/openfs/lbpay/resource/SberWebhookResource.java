@@ -16,7 +16,6 @@
 package ru.openfs.lbpay.resource;
 
 import jakarta.inject.Inject;
-import jakarta.ws.rs.BeanParam;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.Response;
@@ -34,76 +33,48 @@ public class SberWebhookResource {
     @Inject
     PaymentService paymentService;
 
-    enum Operation {
-        /** операция удержания (холдирования) суммы */
-        APPROVED,
-        /** операция отклонения заказа по истечении его времени жизни */
-        DECLINEDBYTIMEOUT,
-        /** операция завершения */
-        DEPOSITED,
-        /** операция отмены */
-        REVERSED,
-        /** операция возврата */
-        REFUNDED;
-    }
-
     @ServerExceptionMapper
     public Response mapException(PaymentException x) {
         Log.errorf("sber: %s", x.getMessage());
         return Response.serverError().build();
     }
 
-    public static class Parameters {
-        /** Уникальный номер заказа в системе платёжного шлюза. */
-        @RestQuery
-        String mdOrder;
-        /** Тип операции, о которой пришло уведомление: */
-        @RestQuery
-        String operation;
-        /** Уникальный номер (идентификатор) заказа в системе продавца. */
-        @RestQuery
-        Long orderNumber;
-        /** Индикатор успешности операции, указанной в параметре operation: 1 - успешно, 0 - ошибка */
-        @RestQuery
-        Integer status;
-
-        @Override
-        public String toString() {
-            return String.format("mdOrder:%s, operation:%s, orderNumber:%d, status:%d",
-                    mdOrder, operation, orderNumber, status);
-        }
-    }
-
+    /**
+     * processing sberbank webhook callback
+     * 
+     * @param  mdOrder     Уникальный номер заказа в системе платёжного шлюза.
+     * @param  operation   Тип операции, о которой пришло уведомление: approved, reversed, refunded, deposited,
+     *                     declinedByTimeout
+     * @param  orderNumber Уникальный номер (идентификатор) заказа в системе продавца
+     * @param  status      Индикатор успешности операции, указанной в параметре operation: 1 - успешно, 0 - ошибка
+     * @return             http_status 200 if OK, otherwise 500
+     */
     @GET
-    public Response callback(@BeanParam Parameters parameters) {
-        Log.debug(parameters);
+    public Response callback(
+            @RestQuery String mdOrder,
+            @RestQuery String operation,
+            @RestQuery Long orderNumber,
+            @RestQuery Integer status) {
 
-        // validate required parameters 
-        if (parameters.mdOrder == null || parameters.operation == null || parameters.orderNumber == null
-                || parameters.status == null)
+        Log.debugf("sber callback: mdOrder:%s, operation:%s, orderNumber:%d, status:%d",
+                mdOrder, operation, orderNumber, status);
+
+        // validate parameters 
+        if (mdOrder == null || operation == null || orderNumber == null || status == null)
             throw new PaymentException("bad request");
 
-        // validate operation 
-        Operation callbackOperation;
-        try {
-            callbackOperation = Operation.valueOf(parameters.operation.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new PaymentException("wrong operation:" + parameters.operation);
-        }
-
-        switch (callbackOperation) {
-            case DEPOSITED -> {
-                if (parameters.status == 1) {
-                    paymentService.processPayment(parameters.orderNumber, parameters.mdOrder);
+        // process operation
+        switch (operation.toLowerCase()) {
+            case "deposited" -> {
+                if (status == 1) {
+                    paymentService.processPayment(orderNumber, mdOrder);
                 } else {
-                    Log.warnf("unsuccess operation:[%s] orderNumber:[%d] waiting for success", parameters.operation,
-                            parameters.orderNumber);
+                    Log.warnf("unsuccess %s for [%d] waiting for success", operation, orderNumber);
                 }
             }
-            case REFUNDED, APPROVED -> Log.warnf("skip operation:[%s] orderNumber:[%d]", parameters.operation,
-                    parameters.orderNumber);
-            case DECLINEDBYTIMEOUT -> paymentService.processDecline(parameters.orderNumber);
-            default -> throw new PaymentException("unprocessed operation:" + parameters.operation);
+            case "refunded", "approved" -> Log.warnf("skip [%s] for [%d]", operation, orderNumber);
+            case "declinedbytimeout" -> paymentService.processDecline(orderNumber);
+            default -> throw new PaymentException("unprocessed operation:" + operation);
         }
         return Response.ok().build();
     }

@@ -9,10 +9,10 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import ru.openfs.lbpay.client.YookassaClient;
 import ru.openfs.lbpay.exception.CheckoutException;
-import ru.openfs.lbpay.mapper.YookassaMapper;
+import ru.openfs.lbpay.mapper.YookassaBuilder;
 
 @ApplicationScoped
-public class YookassaCheckoutService extends CheckoutServiceImpl implements CheckoutService {
+public class YookassaCheckoutService extends AbstractCheckoutService implements CheckoutService {
 
     @ConfigProperty(name = "yookassa.return.url", defaultValue = "http://localhost")
     String successUrl;
@@ -25,8 +25,7 @@ public class YookassaCheckoutService extends CheckoutServiceImpl implements Chec
         Log.debugf("try yookassa checkout orderNumber:%d, account: %s, amount: %.2f",
                 orderNumber, account, amount);
         try {
-            var request = YookassaMapper.createRequest(orderNumber, account, amount, successUrl);
-            var response = yookassaClient.payments(request);
+            var response = yookassaClient.payments(YookassaBuilder.createRequest(orderNumber, account, amount, successUrl));
 
             return Optional.ofNullable(response.confirmation())
                     .map(c -> {

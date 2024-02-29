@@ -28,7 +28,7 @@ import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
 import io.quarkus.logging.Log;
-import ru.openfs.lbpay.dto.sberonline.SberOnlineMessage;
+import ru.openfs.lbpay.dto.sberonline.Message;
 import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.mapper.SberOnlineMapper;
 import ru.openfs.lbpay.service.SberOnlineService;
@@ -49,7 +49,7 @@ public class SberOnlineResource {
     @ServerExceptionMapper
     public RestResponse<String> mapException(SberOnlineException x) {
         Log.error(x.getMessage());
-        return RestResponse.ok(producer.requestBody(new SberOnlineMessage(x.getResponse()), String.class));
+        return RestResponse.ok(producer.requestBody(new Message(x.getResponse()), String.class));
     }
 
     @GET

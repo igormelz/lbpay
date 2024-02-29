@@ -12,11 +12,11 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import ru.openfs.lbpay.client.SberClient;
-import ru.openfs.lbpay.dto.sberbank.SberRegisterResponse;
+import ru.openfs.lbpay.dto.sberbank.RegisterResponse;
 import ru.openfs.lbpay.exception.CheckoutException;
 
 @ApplicationScoped
-public class SberCheckoutService extends CheckoutServiceImpl implements CheckoutService {
+public class SberCheckoutService extends AbstractCheckoutService implements CheckoutService {
 
     @ConfigProperty(name = "sber.user", defaultValue = "user-api")
     String userName;
@@ -42,7 +42,7 @@ public class SberCheckoutService extends CheckoutServiceImpl implements Checkout
                 orderNumber, account, amount);
         try {
             var request = createRequest(orderNumber, account, amount);
-            var sber = mapper.readValue(sberClient.register(request), SberRegisterResponse.class);
+            var sber = mapper.readValue(sberClient.register(request), RegisterResponse.class);
             // test error
             if (sber.errorCode() != null && sber.errorCode() != 0)
                 throw new CheckoutException(sber.errorMessage());

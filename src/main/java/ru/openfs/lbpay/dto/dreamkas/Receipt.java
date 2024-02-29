@@ -2,14 +2,17 @@ package ru.openfs.lbpay.dto.dreamkas;
 
 import java.util.List;
 
+import ru.openfs.lbpay.dto.dreamkas.type.OperationType;
+import ru.openfs.lbpay.dto.dreamkas.type.TaxMode;
+
 public record Receipt(
     String externalId,
     Integer deviceId,
-    String type,
+    OperationType type,
     Integer timeout,
-    String taxMode,
-    List<ReceiptPosition> positions,
-    List<ReceiptPayment> payments,
-    ReceiptAttributes attributes,
-    ReceiptTotal total
+    TaxMode taxMode,
+    List<Position> positions,
+    List<Payment> payments,
+    Attributes attributes,
+    Total total
 ) {}

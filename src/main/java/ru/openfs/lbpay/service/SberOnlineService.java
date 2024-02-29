@@ -16,6 +16,7 @@
 package ru.openfs.lbpay.service;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import io.quarkus.logging.Log;
 import io.vertx.mutiny.core.eventbus.EventBus;
@@ -23,25 +24,22 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.SberOnlineException;
-import ru.openfs.lbpay.mapper.ReceiptMapper;
 import ru.openfs.lbpay.model.ReceiptCustomerInfo;
+import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.SberOnlineCheckResponse;
 import ru.openfs.lbpay.model.SberOnlinePaymentResponse;
 import ru.openfs.lbpay.model.SberOnlineRequest;
 
 import static ru.openfs.lbpay.model.type.SberOnlineResponseCode.*;
-import ru.openfs.lbpay.repository.AuditRepository;
 
 @ApplicationScoped
 public class SberOnlineService {
 
     @Inject
     LbCoreSoapClient lbSoapClient;
-    @Inject
-    AuditRepository auditRepository;
-    @Inject
-    EventBus bus;
 
+    @Inject
+    EventBus eventBus;
 
     // connect to billing
     protected String getSession() {
@@ -76,7 +74,7 @@ public class SberOnlineService {
                 throw new SberOnlineException(ACCOUNT_NOT_FOUND, "account not found:" + account);
             }
             // propagate exception
-            if(e instanceof SberOnlineException) 
+            if (e instanceof SberOnlineException)
                 throw e;
             // raise other
             throw new SberOnlineException(TMP_ERR, e.getMessage());
@@ -97,17 +95,14 @@ public class SberOnlineService {
                     .map(payment -> {
                         // invoke receipt 
                         lbSoapClient.findAccountByAgrmNum(sessionId, request.account()).ifPresent(acct -> {
-                            var customerInfo
-                                    = new ReceiptCustomerInfo(acct.getAccount().getEmail(), acct.getAccount().getMobile());
-                            var receiptOrder = ReceiptMapper.createReceiptOrder(request, customerInfo);
-                            // make audit check point
-                            auditRepository.setOrder(receiptOrder);
-                            // notify receipt service
-                            bus.send("receipt-sale", receiptOrder);
+                            eventBus.send("receipt-sale", new ReceiptOrder(
+                                    request.amount(), request.payId(), request.account(),
+                                    UUID.randomUUID().toString(),
+                                    new ReceiptCustomerInfo(acct.getAccount().getEmail(), acct.getAccount().getMobile())));
                         });
 
-                        Log.infof("payment orderNumber: %s, account: %s, amount: %.2f", request.payId(), request.account(),
-                                request.amount());
+                        Log.infof("paid orderNumber:[%s], account:[%s], amount:[%.2f]",
+                                request.payId(), request.account(), request.amount());
                         return new SberOnlinePaymentResponse(
                                 paymentId, request.amount(), payment.getPay().getLocaldate(), null);
                     })
@@ -125,7 +120,7 @@ public class SberOnlineService {
                         .orElseThrow(() -> new SberOnlineException(TMP_ERR, e.getMessage()));
             }
 
-            bus.send("notify-error", String.format("payment orderNumber: %s - %s", request.payId(), e.getMessage()));
+            eventBus.send("notify-error", String.format("payment orderNumber: %s - %s", request.payId(), e.getMessage()));
             throw new SberOnlineException(TMP_ERR, e.getMessage());
 
         } finally {

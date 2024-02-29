@@ -24,7 +24,7 @@ import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import ru.openfs.lbpay.model.AuditRecord;
-import ru.openfs.lbpay.repository.AuditRepository;
+import ru.openfs.lbpay.repository.AuditDAO;
 
 @Singleton
 public class BotCommandProcessor implements Processor {
@@ -44,7 +44,7 @@ public class BotCommandProcessor implements Processor {
     ProducerTemplate producer;
 
     @Inject
-    AuditRepository audit;
+    AuditDAO audit;
 
     @Inject
     EventBus bus;
@@ -146,11 +146,11 @@ public class BotCommandProcessor implements Processor {
     private void doRegisterReceipt(String orderNumber, int messageId) {
         audit.findByOrderNumber(orderNumber).subscribe().with(
                 order -> {
-                    if (order != null && order.operId == null) {
+                    if (order != null && order.operId() == null) {
                         Log.infof("Re-Processing not registered orderNumber: %s", orderNumber);
                         bus.send("receipt-sale", JsonObject.mapFrom(order));
-                    } else if (order != null && order.status.equalsIgnoreCase("ERROR")) {
-                        Log.infof("Re-Processing error orderNumber: %s", order.orderNumber);
+                    } else if (order != null && order.status().equalsIgnoreCase("ERROR")) {
+                        Log.infof("Re-Processing error orderNumber: %s", order.orderNumber());
                         bus.send("receipt-sale", JsonObject.mapFrom(order));
                     }
                 });
@@ -158,19 +158,19 @@ public class BotCommandProcessor implements Processor {
 
     private InlineKeyboardMarkup receiptKeyboardMarkup(AuditRecord receipt) {
         InlineKeyboardButton btnReg = InlineKeyboardButton.builder()
-                .text("🏦 Register").callbackData(CMD_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
+                .text("🏦 Register").callbackData(CMD_REGISTER_RECEIPT + ":" + receipt.orderNumber()).build();
 
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
-                .text("🚮 Отмена").callbackData(CMD_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
+                .text("🚮 Отмена").callbackData(CMD_CANCEL_RECEIPT + ":" + receipt.orderNumber()).build();
 
         InlineKeyboardButton btnStatus = InlineKeyboardButton.builder()
-                .text("🔁 Status").callbackData(CMD_RECEIPT_STATUS + ":" + receipt.operId).build();
+                .text("🔁 Status").callbackData(CMD_RECEIPT_STATUS + ":" + receipt.operId()).build();
 
-        if (receipt.operId == null || receipt.status.equalsIgnoreCase("ERROR")) {
+        if (receipt.operId() == null || receipt.status().equalsIgnoreCase("ERROR")) {
             return InlineKeyboardMarkup.builder()
                     .addRow(Arrays.asList(btnReg, btnStatus, btnCancel))
                     .build();
-        } else if (receipt.status.equalsIgnoreCase("SUCCESS")) {
+        } else if (receipt.status().equalsIgnoreCase("SUCCESS")) {
             return InlineKeyboardMarkup.builder()
                     .addRow(Arrays.asList(btnCancel))
                     .build();
@@ -182,7 +182,7 @@ public class BotCommandProcessor implements Processor {
     }
 
     private void doCancelRegister(String orderNumber, int messageId) {
-        audit.deleteOperation(orderNumber).subscribe().with(
+        audit.deleteOperationByOrderNumber(orderNumber).subscribe().with(
                 deleted -> {
                     if (deleted)
                         producer.sendBody(EditMessageTextMessage.builder()
@@ -196,18 +196,18 @@ public class BotCommandProcessor implements Processor {
     }
 
     private void getOperationStatus(String operation, int messageId) {
-        bus.request("dk-register-status", operation).subscribe().with(
-                status -> {
-                    JsonObject opJson = JsonObject.mapFrom(status.body());
-                    audit.setOperation(opJson);
-                    audit.findById(opJson.getString("externalId")).subscribe().with(
-                            receipt -> {
-                                producer.sendBody(EditMessageTextMessage.builder().messageId(messageId)
-                                        .text(Templates.receipt(receipt).render()).parseMode("HTML")
-                                        .replyMarkup(receiptKeyboardMarkup(receipt)).build());
-                            });
-                },
-                failProcessing);
+        // bus.request("dk-register-status", operation).subscribe().with(
+        //         status -> {
+        //             var operation = status.body()
+        //             audit.setOperation(opJson);
+        //             audit.findById(opJson.getString("externalId")).subscribe().with(
+        //                     receipt -> {
+        //                         producer.sendBody(EditMessageTextMessage.builder().messageId(messageId)
+        //                                 .text(Templates.receipt(receipt).render()).parseMode("HTML")
+        //                                 .replyMarkup(receiptKeyboardMarkup(receipt)).build());
+        //                     });
+        //         },
+        //         failProcessing);
     }
 
     private void getWaitingReceipts() {

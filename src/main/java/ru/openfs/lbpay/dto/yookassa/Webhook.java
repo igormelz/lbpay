@@ -1,9 +1,9 @@
 package ru.openfs.lbpay.dto.yookassa;
 
-public record YookassaWebhook(
+public record Webhook(
     String type,
     String event,
-    YookassaPayment object
+    Payment object
 ) {
     
 }

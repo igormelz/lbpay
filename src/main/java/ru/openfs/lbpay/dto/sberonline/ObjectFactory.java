@@ -28,13 +28,13 @@ public class ObjectFactory {
 
     public ObjectFactory() {}
 
-    public SberOnlineMessage createSberOnlineMessageType() {
-        return new SberOnlineMessage();
+    public Message createSberOnlineMessageType() {
+        return new Message();
     }
 
     @XmlElementDecl(namespace = "", name = "response")
-    public JAXBElement<SberOnlineMessage> createResponse(SberOnlineMessage value) {
-        return new JAXBElement<SberOnlineMessage>(responseQNAME, SberOnlineMessage.class, null, value);
+    public JAXBElement<Message> createResponse(Message value) {
+        return new JAXBElement<Message>(responseQNAME, Message.class, null, value);
     }
 
 }

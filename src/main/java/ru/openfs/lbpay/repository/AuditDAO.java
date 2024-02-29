@@ -18,35 +18,27 @@ package ru.openfs.lbpay.repository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import org.apache.camel.ProducerTemplate;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.quarkus.logging.Log;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import io.vertx.core.json.JsonObject;
-import io.vertx.mutiny.core.eventbus.EventBus;
 import io.vertx.mutiny.sqlclient.Row;
 import io.vertx.mutiny.sqlclient.Tuple;
 import jakarta.annotation.PostConstruct;
+import ru.openfs.lbpay.dto.dreamkas.Operation;
 import ru.openfs.lbpay.model.AuditOrder;
 import ru.openfs.lbpay.model.AuditRecord;
 import ru.openfs.lbpay.model.ReceiptOrder;
 
 @ApplicationScoped
-public class AuditRepository {
+public class AuditDAO {
 
     @ConfigProperty(name = "audit.schema.create", defaultValue = "false")
     boolean schemaCreate;
 
     @Inject
-    EventBus bus;
-
-    @Inject
     io.vertx.mutiny.mysqlclient.MySQLPool client;
-
-    @Inject
-    ProducerTemplate producer;
 
     @PostConstruct
     void config() {
@@ -73,7 +65,8 @@ public class AuditRepository {
                 .await().indefinitely();
     }
 
-    public void setOrder(ReceiptOrder order) {
+    // CREATE
+    public void createOperation(ReceiptOrder order) {
         client.preparedQuery(
                 "INSERT ReceiptOperation SET mdOrder = ?, orderNumber = ?, account = ?, amount = ?, email = ?, phone = ?")
                 .execute(Tuple.of(order.mdOrder(), order.orderNumber(), order.account(), order.amount(), order.info().email(),
@@ -81,37 +74,32 @@ public class AuditRepository {
                 .await().indefinitely();
     }
 
-    public Uni<AuditRecord> findById(String key) {
-        return client
-                .preparedQuery("SELECT * FROM ReceiptOperation WHERE mdOrder = ?")
-                .execute(Tuple.of(key))
-                .onItem().transform(set -> set.iterator())
-                .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null);
-    }
-
-    public void setOperation(JsonObject operation) {
+    // UPDATE 
+    public void updateOperation(Operation operation) {
         client.preparedQuery("UPDATE ReceiptOperation SET operId = ?, status = ? WHERE mdOrder = ?")
-                .execute(Tuple.of(operation.getString("id"), operation.getString("status"),
-                        operation.getString("externalId")))
+                .execute(Tuple.of(operation.id(), operation.status().name(), operation.externalId()))
                 .subscribe().with(i -> {
                 });
     }
 
-    public void processOperation(JsonObject operation) {
-        if (operation.getString("status").equalsIgnoreCase("SUCCESS")) {
-            client.preparedQuery("DELETE FROM ReceiptOperation WHERE mdOrder = ?")
-                    .execute(Tuple.of(operation.getString("externalId"))).await().indefinitely();
-        } else {
-            client.preparedQuery("UPDATE ReceiptOperation SET operId = ?, status = ? WHERE mdOrder = ?")
-                    .execute(Tuple.of(operation.getString("id"), operation.getString("status"),
-                            operation.getString("externalId")))
-                    .await().indefinitely();
-        }
+    // DELETE
+    public void deleteOperation(Operation operation) {
+        client.preparedQuery("DELETE FROM ReceiptOperation WHERE mdOrder = ?")
+                .execute(Tuple.of(operation.externalId())).await().indefinitely();
     }
 
-    public Uni<Boolean> deleteOperation(String orderNumber) {
+    public Uni<Boolean> deleteOperationByOrderNumber(String orderNumber) {
         return client.preparedQuery("DELETE FROM ReceiptOperation WHERE orderNumber = ?").execute(Tuple.of(orderNumber))
                 .onItem().transform(rowSet -> rowSet.rowCount() == 1);
+    }
+
+    // GET 
+    public Uni<AuditRecord> findById(String mdOrder) {
+        return client
+                .preparedQuery("SELECT * FROM ReceiptOperation WHERE mdOrder = ?")
+                .execute(Tuple.of(mdOrder))
+                .onItem().transform(Iterable::iterator)
+                .onItem().transform(iterator -> iterator.hasNext() ? from(iterator.next()) : null);
     }
 
     public Uni<AuditRecord> findByOrderNumber(String orderNumber) {
@@ -125,7 +113,7 @@ public class AuditRepository {
     public Multi<AuditRecord> findAll() {
         return client.preparedQuery("SELECT * FROM ReceiptOperation").execute()
                 .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
-                .onItem().transform(AuditRepository::from);
+                .onItem().transform(AuditDAO::from);
     }
 
     private static AuditRecord from(Row row) {
@@ -133,12 +121,12 @@ public class AuditRepository {
                 row.getString("mdOrder"),
                 row.getString("orderNumber"),
                 row.getString("account"),
-                row.getDouble("amount"),
                 row.getString("phone"),
                 row.getString("email"),
-                row.getLocalDateTime("createAt"),
+                row.getDouble("amount"),
                 row.getString("operId"),
-                row.getString("status"));
+                row.getString("status"),
+                row.getLocalDateTime("createAt"));
     }
 
     private static AuditOrder orderFrom(Row row) {
@@ -155,7 +143,7 @@ public class AuditRepository {
                             "FROM billing.pre_payments WHERE status = 0")
                 .execute()
                 .onItem().transformToMulti(set -> Multi.createFrom().iterable(set))
-                .onItem().transform(AuditRepository::orderFrom);
+                .onItem().transform(AuditDAO::orderFrom);
     }
 
     public void setWaitOrder(long orderNumber) {

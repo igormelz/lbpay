@@ -4,7 +4,7 @@ import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-import ru.openfs.lbpay.dto.sberonline.SberOnlineMessage;
+import ru.openfs.lbpay.dto.sberonline.Message;
 import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.model.SberOnlineCheckResponse;
 import ru.openfs.lbpay.model.SberOnlinePaymentResponse;
@@ -26,7 +26,7 @@ public class SberOnlineMapper {
         }
     }
 
-    public static String toRegDate(String dateTime) {
+    private static String toRegDate(String dateTime) {
         return LocalDateTime.parse(dateTime, BILL_DATE_FMT).format(PAY_DATE_FMT);
     }
 
@@ -54,23 +54,23 @@ public class SberOnlineMapper {
         return new SberOnlineRequest(operation, account, null, null, null);
     }
 
-    public static SberOnlineMessage fromCheckResponse(SberOnlineCheckResponse response) {
-        var message = new SberOnlineMessage(SberOnlineResponseCode.OK);
+    public static Message fromCheckResponse(SberOnlineCheckResponse response) {
+        var message = new Message(SberOnlineResponseCode.OK);
         message.setBalance(response.balance());
         message.setRecSum(response.recommended());
         message.setAddress(response.address());
         return message;
     }
 
-    public static SberOnlineMessage fromPaymentResponse(SberOnlinePaymentResponse response) {
+    public static Message fromPaymentResponse(SberOnlinePaymentResponse response) {
         if(response.amount() == null) {
-            var message = new SberOnlineMessage(SberOnlineResponseCode.OK);
+            var message = new Message(SberOnlineResponseCode.OK);
             message.setExtId(response.paymentId());
             message.setSum(response.paymentSum());
             message.setRegDate(toRegDate(response.regDate()));
             return message;
         }
-        var message = new SberOnlineMessage(SberOnlineResponseCode.PAY_TRX_DUPLICATE);
+        var message = new Message(SberOnlineResponseCode.PAY_TRX_DUPLICATE);
         message.setExtId(response.paymentId());
         message.setAmount(response.amount());
         message.setRegDate(toRegDate(response.regDate()));

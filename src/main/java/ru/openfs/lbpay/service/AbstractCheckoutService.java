@@ -22,7 +22,7 @@ import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.CheckoutException;
 
-public abstract class CheckoutServiceImpl {
+public abstract class AbstractCheckoutService {
 
     @Inject
     LbCoreSoapClient lbSoapService;
@@ -34,12 +34,12 @@ public abstract class CheckoutServiceImpl {
     }
 
     /**
-     * check active account
+     * validate if account is active 
      * 
      * @param  account the account number to test
-     * @return         current balance, recommended pay and address
+     * @return TRUE if active, FALSE otherwise
      */
-    public boolean processCheckAccount(String account) {
+    public boolean isActiveAccount(String account) {
         final String sessionId = getSession();
         try {
             return lbSoapService.isActiveAgreement(sessionId, account);
@@ -53,7 +53,7 @@ public abstract class CheckoutServiceImpl {
      * 
      * @param  account the account to checkout
      * @param  amount  tha amount
-     * @return
+     * @return url string to payment page
      */
     public String processCheckout(String account, Double amount) {
         Log.infof("checkout account: %s, amount: %.2f", account, amount);

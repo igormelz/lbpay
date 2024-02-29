@@ -2,17 +2,17 @@ package ru.openfs.lbpay.dto.yookassa;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public record YookassaPayment(
+public record Payment(
     String id, 
-    String status, 
-    YookassaAmount amount, 
-    @JsonProperty("income_amount") YookassaAmount incomeAmount, 
+    String status,
+    Amount amount, 
+    @JsonProperty("income_amount") Amount incomeAmount, 
     String description,
-    YookassaRecepient recepient,
-    @JsonProperty("payment_method") YookassaPaymentMethod paymentMethod,
+    Recepient recepient,
+    @JsonProperty("payment_method") PaymentMethod paymentMethod,
     @JsonProperty("created_at") String createdAt,
     @JsonProperty("captured_at") String capturedAt,
     @JsonProperty("expires_at") String expiresAt, 
-    YookassaConfirmation confirmation,
-    YookassaMetaData metadata,
+    Confirmation confirmation,
+    MetaData metadata,
     Boolean test, Boolean paid, Boolean refundable) {}

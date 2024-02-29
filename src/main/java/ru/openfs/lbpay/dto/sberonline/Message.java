@@ -25,7 +25,7 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
 
 @RegisterForReflection
 @XmlRootElement(name = "response")
-public class SberOnlineMessage implements Serializable {
+public class Message implements Serializable {
     @XmlElement(name = "CODE")
     int code;
     @XmlElement(name = "MESSAGE")
@@ -49,9 +49,9 @@ public class SberOnlineMessage implements Serializable {
     @XmlElement(name = "EXT_ID")
     Long extId;
 
-    public SberOnlineMessage() {}
+    public Message() {}
 
-    public SberOnlineMessage(SberOnlineResponseCode response) {
+    public Message(SberOnlineResponseCode response) {
         this.code = response.getCode();
         this.message = response.getMsg();
     }

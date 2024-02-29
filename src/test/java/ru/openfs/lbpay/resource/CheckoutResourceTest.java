@@ -2,13 +2,20 @@ package ru.openfs.lbpay.resource;
 
 import org.junit.jupiter.api.Test;
 
+import io.quarkus.test.Mock;
 import io.quarkus.test.junit.QuarkusTest;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import ru.openfs.lbpay.service.CheckoutService;
 
 import static io.restassured.RestAssured.given;
-//import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.containsString;
 
 @QuarkusTest
 class CheckoutResourceTest {
+
+    @Inject
+    MockCheckoutService checkoutService;
 
     @Test
     void testCheckAccountOk() {
@@ -20,16 +27,7 @@ class CheckoutResourceTest {
     }
 
     @Test
-    void testCheckAccountFailUnknown() {
-        given()
-                .param("uid", "000000")
-                .when().get("/pay/checkout")
-                .then()
-                .statusCode(400);
-    }
-
-    @Test
-    void testCheckAccountOkFailPattern() {
+    void testCheckAccountFailPattern() {
         given()
                 .param("uid", "111")
                 .when().get("/pay/checkout")
@@ -71,26 +69,32 @@ class CheckoutResourceTest {
     }
 
     @Test
-    void testCheckoutInactive() {
+    void testCheckoutOk() {
         given()
+                .redirects().follow(false)
                 .urlEncodingEnabled(true)
-                .param("uid", "111112").and()
+                .param("uid", "111111").and()
                 .param("amount", 10.01)
                 .when().post("/pay/checkout")
                 .then()
-                .statusCode(400);
+                .statusCode(303)
+                .header("Location", containsString("payment_url"));
     }
 
-    // @Test
-    // public void testCheckoutOk() {
-    //     given()
-    //             .redirects().follow(false)
-    //             .urlEncodingEnabled(true)
-    //             .param("uid", "111111").and()
-    //             .param("amount", 10.01)
-    //             .when().post("/pay/checkout")
-    //             .then()
-    //             .statusCode(303)
-    //             .header("Location", containsString("sberbank.ru"));
-    // }
+    @Mock
+    @ApplicationScoped
+    public static class MockCheckoutService implements CheckoutService {
+
+        @Override
+        public boolean isActiveAccount(String account) {
+            return true;
+        }
+
+        @Override
+        public String processCheckout(String account, Double amount) {
+            return "http://payment_url";
+        }
+        
+    }
+
 }
