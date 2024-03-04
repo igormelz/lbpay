@@ -4,11 +4,9 @@ import static io.restassured.RestAssured.given;
 
 import org.junit.jupiter.api.Test;
 
-import io.quarkus.test.Mock;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.service.PaymentService;
+import ru.openfs.lbpay.mocks.MockPaymentService;
 
 @QuarkusTest
 class SberWebhookResourceTest {
@@ -62,17 +60,6 @@ class SberWebhookResourceTest {
                 .get("/pay/sber/callback")
                 .then()
                 .statusCode(500);
-    }
-
-    @Mock
-    @ApplicationScoped
-    public static class MockPaymentService extends PaymentService {
-
-        @Override
-        public void processPayment(Long orderNumber, String mdOrder) {}
-
-        @Override
-        public void processDecline(long orderNumber) {}
     }
 
 }

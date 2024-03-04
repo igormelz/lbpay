@@ -1,0 +1,3 @@
+{#if receipt.operationStatus } {receipt.operationStatus} {#else}❌ NO REG {/if}
+<code>договор: {receipt.account} заказ: {receipt.orderNumber}
+от {time:format(receipt.createAt,"d MMM uuuu HH:mm:ss")}</code>

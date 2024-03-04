@@ -29,7 +29,7 @@ public class YookassaCheckoutService extends AbstractCheckoutService implements 
 
             return Optional.ofNullable(response.confirmation())
                     .map(c -> {
-                        Log.infof("yookassa checkout orderNumber: %d, account: %s, amount: %.2f, mdOrder: %s",
+                        Log.infof("yookassa checkout for %d: account: %s, amount: %.2f, mdOrder: %s",
                                 orderNumber, account, amount, response.id());
                         return c.confirmationUrl();
                     }).orElseThrow(() -> new CheckoutException("no confiramtion url"));

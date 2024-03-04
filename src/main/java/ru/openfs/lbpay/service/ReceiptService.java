@@ -1,5 +1,8 @@
 package ru.openfs.lbpay.service;
 
+import java.time.LocalDateTime;
+import java.util.Optional;
+
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
@@ -8,11 +11,12 @@ import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import ru.openfs.lbpay.client.DreamkasClient;
 import ru.openfs.lbpay.dto.dreamkas.Operation;
 import ru.openfs.lbpay.mapper.ReceiptBuilder;
 import ru.openfs.lbpay.model.ReceiptOrder;
-import ru.openfs.lbpay.repository.AuditDAO;
+import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @ApplicationScoped
 public class ReceiptService {
@@ -24,57 +28,91 @@ public class ReceiptService {
     EventBus eventBus;
 
     @Inject
-    AuditDAO auditRepository;
-
     @RestClient
     DreamkasClient dreamkasClient;
 
     /**
-     * register receipt on OFD
+     * register receipt on OFD. invoke async by success payment or by bot command 'reg_receipt'
      * 
      * @param receiptOrder the receipt order
      */
-    @ConsumeEvent("register-receipt")
+    @ConsumeEvent(value = "register-receipt", blocking = true)
+    @Transactional
     public void registerReceipt(ReceiptOrder receiptOrder) {
         Log.debugf("Start registering receiptOrder: %s", receiptOrder);
 
-        auditRepository.createOperation(receiptOrder);
+        var receiptOperation = getOrCreateOperation(receiptOrder);
 
-        try {
-            var receipt = ReceiptBuilder.createReceipt(receiptOrder, deviceId);
-            Log.debugf("Create receipt: %s", receipt);
+        if (receiptOperation.isPersistent()) {
+            try {
+                // call to register
+                var receipt = ReceiptBuilder.createReceipt(receiptOrder, deviceId);
+                Log.debugf("Create receipt: %s", receipt);
 
-            var response = dreamkasClient.register(receipt);
-            Log.infof("Receipt for [%s]: %s with operation: %s", receiptOrder.orderNumber(),
-                    response.status(), response.id());
+                var response = dreamkasClient.register(receipt);
+                Optional.ofNullable(response).ifPresentOrElse(it -> {
+                    // update auditEntry
+                    updateReceiptOperation(receiptOperation, response);
+                    Log.infof("Receipt for [%s]: %s with operation: %s", receiptOrder.orderNumber(), it.status(), it.id());
+                }, () -> Log.error("no response"));
 
-            auditRepository.updateOperation(response);
-        } catch (RuntimeException e) {
-            Log.error(e.getMessage());
-            eventBus.send("notify-error", e.getMessage());
+            } catch (RuntimeException e) {
+                Log.error(e.getMessage());
+                eventBus.send("notify-error", e.getMessage());
+            }
         }
     }
 
+    /**
+     * process audit operation
+     * 
+     * @param operation
+     */
+    @Transactional
     public void processReceiptOperation(Operation operation) {
-        // process audit record
-        auditRepository.findById(operation.externalId()).subscribe().with(
-                auditRecord -> {
+        DreamkasOperation.findByExternalId(operation.externalId()).ifPresent(
+                receiptOperation -> {
                     switch (operation.status()) {
                         case ERROR -> {
                             eventBus.send("notify-error",
-                                    String.format("receipt for [%s]: %s", auditRecord.orderNumber(),
+                                    String.format("receipt for [%s]: %s", receiptOperation.orderNumber,
                                             operation.data().error().message()));
-                            auditRepository.updateOperation(operation);
+                            updateReceiptOperation(receiptOperation, operation);
                         }
                         case SUCCESS -> {
-                            Log.infof("Receipt for [%s]: %s with operation: %s", auditRecord.orderNumber(),
+                            Log.infof("Receipt for [%s]: %s with operation: %s", receiptOperation.orderNumber,
                                     operation.status(), operation.id());
-                            auditRepository.deleteOperation(operation);
+                            receiptOperation.delete();
                         }
-                        default -> auditRepository.updateOperation(operation);
+                        default -> updateReceiptOperation(receiptOperation, operation);
                     }
-                },
-                fail -> Log.warn("not found receipt operation by id:" + operation.externalId()));
+
+                });
+    }
+
+    private DreamkasOperation getOrCreateOperation(ReceiptOrder receiptOrder) {
+        return DreamkasOperation.findByOrderNumber(receiptOrder.orderNumber()).orElseGet(() -> {
+            var receiptOperation = new DreamkasOperation();
+            receiptOperation.account = receiptOrder.account();
+            receiptOperation.amount = receiptOrder.amount();
+            receiptOperation.createAt = LocalDateTime.now();
+            receiptOperation.email = receiptOrder.info().email();
+            receiptOperation.phone = receiptOrder.info().phone();
+            receiptOperation.externalId = receiptOrder.mdOrder();
+            receiptOperation.orderNumber = receiptOrder.orderNumber();
+            receiptOperation.persistAndFlush();
+            return receiptOperation;
+        });
+    }
+
+    private void updateReceiptOperation(DreamkasOperation receiptOperation, Operation operation) {
+        receiptOperation.operationId = operation.id();
+        receiptOperation.operationStatus = operation.status();
+        receiptOperation.persist();
+        if (receiptOperation.isPersistent())
+            Log.debug("update operation");
+        else
+            Log.error("operation not updated");
     }
 
     // @ConsumeEvent("dk-register-status")

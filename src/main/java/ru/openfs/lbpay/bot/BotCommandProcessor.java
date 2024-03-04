@@ -1,10 +1,13 @@
 package ru.openfs.lbpay.bot;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.function.Consumer;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.transaction.Transactional;
+import jakarta.transaction.Transactional.TxType;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
@@ -20,11 +23,14 @@ import org.apache.camel.component.telegram.model.OutgoingCallbackQueryMessage;
 import org.apache.camel.component.telegram.model.OutgoingTextMessage;
 
 import io.quarkus.logging.Log;
+import io.quarkus.panache.common.Sort;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
+import ru.openfs.lbpay.dto.dreamkas.type.OperationStatus;
+import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
 import ru.openfs.lbpay.model.AuditRecord;
-import ru.openfs.lbpay.repository.AuditDAO;
+import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @Singleton
 public class BotCommandProcessor implements Processor {
@@ -44,10 +50,7 @@ public class BotCommandProcessor implements Processor {
     ProducerTemplate producer;
 
     @Inject
-    AuditDAO audit;
-
-    @Inject
-    EventBus bus;
+    EventBus eventBus;
 
     // error handler
     Consumer<Throwable> failProcessing = fail -> producer.sendBody("‼️" + fail.getMessage());
@@ -131,7 +134,7 @@ public class BotCommandProcessor implements Processor {
     }
 
     private void doProcessPayment(String orderNumber, String mdOrder, int messageId) {
-        bus.request("lb-payment", new JsonObject().put("orderNumber", orderNumber).put("mdOrder", mdOrder)).subscribe()
+        eventBus.request("lb-payment", new JsonObject().put("orderNumber", orderNumber).put("mdOrder", mdOrder)).subscribe()
                 .with(ok -> {
                     if ((Boolean) ok.body())
                         producer.sendBody(EditMessageTextMessage.builder()
@@ -143,34 +146,34 @@ public class BotCommandProcessor implements Processor {
                 }, failProcessing);
     }
 
-    private void doRegisterReceipt(String orderNumber, int messageId) {
-        audit.findByOrderNumber(orderNumber).subscribe().with(
-                order -> {
-                    if (order != null && order.operId() == null) {
-                        Log.infof("Re-Processing not registered orderNumber: %s", orderNumber);
-                        bus.send("receipt-sale", JsonObject.mapFrom(order));
-                    } else if (order != null && order.status().equalsIgnoreCase("ERROR")) {
-                        Log.infof("Re-Processing error orderNumber: %s", order.orderNumber());
-                        bus.send("receipt-sale", JsonObject.mapFrom(order));
-                    }
-                });
+    @Transactional
+    public void doRegisterReceipt(String orderNumber, int messageId) {
+        DreamkasOperation.findByOrderNumber(orderNumber).ifPresent(receipOperation -> {
+            if (receipOperation.operationId == null) {
+                Log.infof("Re-Processing not registered orderNumber: %s", orderNumber);
+                eventBus.send("register-receipt", ReceiptOrderBuilder.createReceiptOrderFromOperation(receipOperation));
+            } else if (receipOperation.operationStatus == OperationStatus.ERROR) {
+                Log.infof("Re-Processing error orderNumber: %s", orderNumber);
+                eventBus.send("register-receipt", ReceiptOrderBuilder.createReceiptOrderFromOperation(receipOperation));
+            }
+        });
     }
 
-    private InlineKeyboardMarkup receiptKeyboardMarkup(AuditRecord receipt) {
+    private InlineKeyboardMarkup receiptKeyboardMarkup(DreamkasOperation receipt) {
         InlineKeyboardButton btnReg = InlineKeyboardButton.builder()
-                .text("🏦 Register").callbackData(CMD_REGISTER_RECEIPT + ":" + receipt.orderNumber()).build();
+                .text("🏦 Register").callbackData(CMD_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
-                .text("🚮 Отмена").callbackData(CMD_CANCEL_RECEIPT + ":" + receipt.orderNumber()).build();
+                .text("🚮 Отмена").callbackData(CMD_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnStatus = InlineKeyboardButton.builder()
-                .text("🔁 Status").callbackData(CMD_RECEIPT_STATUS + ":" + receipt.operId()).build();
+                .text("🔁 Status").callbackData(CMD_RECEIPT_STATUS + ":" + receipt.operationId).build();
 
-        if (receipt.operId() == null || receipt.status().equalsIgnoreCase("ERROR")) {
+        if (receipt.operationId == null || receipt.operationStatus == OperationStatus.ERROR) {
             return InlineKeyboardMarkup.builder()
                     .addRow(Arrays.asList(btnReg, btnStatus, btnCancel))
                     .build();
-        } else if (receipt.status().equalsIgnoreCase("SUCCESS")) {
+        } else if (receipt.operationStatus == OperationStatus.SUCCESS) {
             return InlineKeyboardMarkup.builder()
                     .addRow(Arrays.asList(btnCancel))
                     .build();
@@ -182,17 +185,17 @@ public class BotCommandProcessor implements Processor {
     }
 
     private void doCancelRegister(String orderNumber, int messageId) {
-        audit.deleteOperationByOrderNumber(orderNumber).subscribe().with(
-                deleted -> {
-                    if (deleted)
-                        producer.sendBody(EditMessageTextMessage.builder()
-                                .messageId(messageId)
-                                .text("🚮 Прекращена регистрация чека \n 💳 Заказ #" + orderNumber)
-                                .build());
-                    else
-                        producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
-                },
-                failProcessing);
+        // audit.deleteOperationByOrderNumber(orderNumber).subscribe().with(
+        //         deleted -> {
+        //             if (deleted)
+        //                 producer.sendBody(EditMessageTextMessage.builder()
+        //                         .messageId(messageId)
+        //                         .text("🚮 Прекращена регистрация чека \n 💳 Заказ #" + orderNumber)
+        //                         .build());
+        //             else
+        //                 producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
+        //         },
+        //         failProcessing);
     }
 
     private void getOperationStatus(String operation, int messageId) {
@@ -210,61 +213,60 @@ public class BotCommandProcessor implements Processor {
         //         failProcessing);
     }
 
-    private void getWaitingReceipts() {
-        audit.findAll().collect().asList().subscribe().with(response -> {
-            if (response.size() == 0) {
-                producer.sendBody("🆗 no waiting receipts");
-            } else {
-                response.forEach(receipt -> {
-                    producer.sendBody(OutgoingTextMessage.builder().text(Templates.receipt(receipt).render())
-                            .parseMode("HTML").replyMarkup(receiptKeyboardMarkup(receipt)).build());
-                });
-            }
-        }, failProcessing);
+    @Transactional
+    public void getWaitingReceipts() {
+        List<DreamkasOperation> receipts = DreamkasOperation.listAll(Sort.by("createAt"));
+        if (receipts.isEmpty())
+            producer.sendBody("🆗 no waiting receipts");
+        else
+            receipts.forEach(receipt -> {
+                producer.sendBody(OutgoingTextMessage.builder().text(Templates.receiptOperationStatus(receipt).render())
+                        .parseMode("HTML").replyMarkup(receiptKeyboardMarkup(receipt)).build());
+            });
     }
 
     private void doCancelOrder(String orderNumber, int messageId) {
-        audit.clearOrder(orderNumber).subscribe().with(
-                deleted -> {
-                    if (deleted)
-                        producer.sendBody(EditMessageTextMessage.builder()
-                                .messageId(messageId)
-                                .text("💳 Заказ #" + orderNumber + " 🚮 отменен")
-                                // .replyMarkup(KM_CLEAR)
-                                .build());
-                    else
-                        producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
-                },
-                failProcessing);
+        // audit.clearOrder(orderNumber).subscribe().with(
+        //         deleted -> {
+        //             if (deleted)
+        //                 producer.sendBody(EditMessageTextMessage.builder()
+        //                         .messageId(messageId)
+        //                         .text("💳 Заказ #" + orderNumber + " 🚮 отменен")
+        //                         // .replyMarkup(KM_CLEAR)
+        //                         .build());
+        //             else
+        //                 producer.sendBody("💳 Заказ #" + orderNumber + " ❓не найден");
+        //         },
+        //         failProcessing);
     }
 
     private void getPendingOrders() {
-        audit.getPendingOrders().collect().asList().subscribe().with(
-                orders -> {
-                    if (orders.size() == 0) {
-                        producer.sendBody("🤷 no pending orders");
-                    } else {
-                        orders.forEach(order -> {
-                            OutgoingTextMessage msg = OutgoingTextMessage.builder()
-                                    .text(Templates.order(order).render())
-                                    .parseMode("HTML")
-                                    .replyMarkup(
-                                            InlineKeyboardMarkup.builder()
-                                                    .addRow(Arrays.asList(InlineKeyboardButton.builder()
-                                                            .text("🔁 Status")
-                                                            .callbackData(CMD_PAYMENT_STATUS + ":" + order.orderNumber())
-                                                            .build()))
-                                                    .build())
-                                    .build();
-                            producer.sendBody(msg);
-                        });
-                    }
-                },
-                failProcessing);
+        // audit.getPendingOrders().collect().asList().subscribe().with(
+        //         orders -> {
+        //             if (orders.size() == 0) {
+        //                 producer.sendBody("🤷 no pending orders");
+        //             } else {
+        //                 orders.forEach(order -> {
+        //                     OutgoingTextMessage msg = OutgoingTextMessage.builder()
+        //                             .text(Templates.order(order).render())
+        //                             .parseMode("HTML")
+        //                             .replyMarkup(
+        //                                     InlineKeyboardMarkup.builder()
+        //                                             .addRow(Arrays.asList(InlineKeyboardButton.builder()
+        //                                                     .text("🔁 Status")
+        //                                                     .callbackData(CMD_PAYMENT_STATUS + ":" + order.orderNumber())
+        //                                                     .build()))
+        //                                             .build())
+        //                             .build();
+        //                     producer.sendBody(msg);
+        //                 });
+        //             }
+        //         },
+        //         failProcessing);
     }
 
     private void callbackPaymentStatus(String orderNumber, int messageId) {
-        bus.request("sber-payment-status", orderNumber).subscribe().with(
+        eventBus.request("sber-payment-status", orderNumber).subscribe().with(
                 status -> {
                     EditMessageTextMessage msg;
                     // process answer as json
@@ -281,9 +283,9 @@ public class BotCommandProcessor implements Processor {
                                                 .builder()
                                                 .addRow(Arrays.asList(InlineKeyboardButton.builder().text("💳 payment")
                                                         .callbackData(CMD_PROCESS_PAYMENT + ":" +
-                                                                orderNumber + ":" +
-                                                                json.getJsonArray("attributes").getJsonObject(0)
-                                                                        .getString("value"))
+                                                                      orderNumber + ":" +
+                                                                      json.getJsonArray("attributes").getJsonObject(0)
+                                                                              .getString("value"))
                                                         .build()))
                                                 .build())
                                 .build();

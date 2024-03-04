@@ -24,6 +24,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.SberOnlineException;
+import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
 import ru.openfs.lbpay.model.ReceiptCustomerInfo;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.SberOnlineCheckResponse;
@@ -95,10 +96,10 @@ public class SberOnlineService {
                     .map(payment -> {
                         // invoke receipt 
                         lbSoapClient.findAccountByAgrmNum(sessionId, request.account()).ifPresent(acct -> {
-                            eventBus.send("receipt-sale", new ReceiptOrder(
-                                    request.amount(), request.payId(), request.account(),
-                                    UUID.randomUUID().toString(),
-                                    new ReceiptCustomerInfo(acct.getAccount().getEmail(), acct.getAccount().getMobile())));
+                            eventBus.send("register-receipt",
+                                    ReceiptOrderBuilder.createReceiptOrder(UUID.randomUUID().toString(), request.payId(),
+                                            request.amount(), request.account(),
+                                            acct.getAccount().getEmail(), acct.getAccount().getMobile()));
                         });
 
                         Log.infof("paid orderNumber:[%s], account:[%s], amount:[%.2f]",

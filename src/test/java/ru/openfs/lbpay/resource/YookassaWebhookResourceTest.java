@@ -9,7 +9,7 @@ import jakarta.inject.Inject;
 import ru.openfs.lbpay.dto.yookassa.MetaData;
 import ru.openfs.lbpay.dto.yookassa.Payment;
 import ru.openfs.lbpay.dto.yookassa.Webhook;
-import ru.openfs.lbpay.resource.SberWebhookResourceTest.MockPaymentService;
+import ru.openfs.lbpay.mocks.MockPaymentService;
 
 @QuarkusTest
 class YookassaWebhookResourceTest {

@@ -4,14 +4,9 @@ import static io.restassured.RestAssured.given;
 
 import org.junit.jupiter.api.Test;
 
-import io.quarkus.test.Mock;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.model.SberOnlineCheckResponse;
-import ru.openfs.lbpay.model.SberOnlinePaymentResponse;
-import ru.openfs.lbpay.model.SberOnlineRequest;
-import ru.openfs.lbpay.service.SberOnlineService;
+import ru.openfs.lbpay.mocks.MockSberOnlineService;
 
 import static org.hamcrest.CoreMatchers.containsString;
 
@@ -50,19 +45,5 @@ class SberOnlineResourceTest {
             .body(containsString("<EXT_ID>101010</EXT_ID>"))
             .and().body(containsString("<SUM>1.1</SUM>"))
             .and().body(containsString("<REG_DATE>01.01.2024_12:32:00</REG_DATE>"));
-    }
-
-    @Mock
-    @ApplicationScoped
-    public static class MockSberOnlineService extends SberOnlineService {
-        @Override
-        public SberOnlineCheckResponse processCheckAccount(String account) {
-            return new SberOnlineCheckResponse(1.0, 10.0, "SPB");
-        }
-
-        @Override
-        public SberOnlinePaymentResponse processPayment(SberOnlineRequest request) {
-            return new SberOnlinePaymentResponse(101010L, request.amount(), "2024-01-01 12:32:00", null);
-        }
     }
 }

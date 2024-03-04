@@ -2,11 +2,9 @@ package ru.openfs.lbpay.resource;
 
 import org.junit.jupiter.api.Test;
 
-import io.quarkus.test.Mock;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.service.CheckoutService;
+import ru.openfs.lbpay.mocks.MockCheckoutService;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -79,22 +77,6 @@ class CheckoutResourceTest {
                 .then()
                 .statusCode(303)
                 .header("Location", containsString("payment_url"));
-    }
-
-    @Mock
-    @ApplicationScoped
-    public static class MockCheckoutService implements CheckoutService {
-
-        @Override
-        public boolean isActiveAccount(String account) {
-            return true;
-        }
-
-        @Override
-        public String processCheckout(String account, Double amount) {
-            return "http://payment_url";
-        }
-        
     }
 
 }
