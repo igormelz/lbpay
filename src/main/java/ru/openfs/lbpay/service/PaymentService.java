@@ -9,8 +9,6 @@ import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.PaymentException;
 import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
-import ru.openfs.lbpay.model.ReceiptCustomerInfo;
-import ru.openfs.lbpay.model.ReceiptOrder;
 
 @ApplicationScoped
 public class PaymentService {
@@ -33,13 +31,13 @@ public class PaymentService {
      * @param mdOrder     the orderNumber reference id
      */
     public void processPayment(Long orderNumber, String mdOrder) {
-        Log.debugf("start payment orderNumber:[%d]", orderNumber);
+        Log.debugf("start payment for:[%d]", orderNumber);
 
         final String sessionId = getSession();
 
         try {
             var order = lbClient.findOrderNumber(sessionId, orderNumber)
-                    .orElseThrow(() -> new PaymentException("not found orderNumber:[" + orderNumber + "]"));
+                    .orElseThrow(() -> new PaymentException("orderNumber not found for:[" + orderNumber + "]"));
 
             if (order.getStatus() != 0) {
                 Log.warnf("orderNumber:[" + orderNumber + "] was paid at " + order.getPaydate());

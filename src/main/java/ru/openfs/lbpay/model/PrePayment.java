@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
 @RegisterForReflection
-public record AuditOrder(Integer orderNumber,
+public record PrePayment(Integer orderNumber,
                          LocalDateTime payDate,
                          String comments,
                          Integer diff) {}

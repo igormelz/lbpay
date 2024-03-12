@@ -7,6 +7,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.YookassaClient;
 import ru.openfs.lbpay.exception.CheckoutException;
 import ru.openfs.lbpay.mapper.YookassaBuilder;
@@ -17,6 +18,7 @@ public class YookassaCheckoutService extends AbstractCheckoutService implements 
     @ConfigProperty(name = "yookassa.return.url", defaultValue = "http://localhost")
     String successUrl;
 
+    @Inject
     @RestClient
     YookassaClient yookassaClient;
 

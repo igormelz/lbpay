@@ -1,4 +1,4 @@
-package ru.openfs.lbpay.bot;
+package ru.openfs.lbpay.components;
 
 import java.util.Arrays;
 import java.util.List;
@@ -7,7 +7,6 @@ import java.util.function.Consumer;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import jakarta.transaction.Transactional;
-import jakarta.transaction.Transactional.TxType;
 
 import org.apache.camel.Exchange;
 import org.apache.camel.Processor;
@@ -29,7 +28,8 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import ru.openfs.lbpay.dto.dreamkas.type.OperationStatus;
 import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
-import ru.openfs.lbpay.model.AuditRecord;
+import ru.openfs.lbpay.model.PrePaymentsDao;
+import ru.openfs.lbpay.model.Templates;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @Singleton
@@ -38,13 +38,14 @@ public class BotCommandProcessor implements Processor {
     private static final String CMD_START = "/start";
     private static final String CMD_PENDING_ORDERS = "/pending";
     private static final String CMD_WAITING_RECEIPTS = "/wait";
-    private static final String CMD_PAYMENT_STATUS = "pay_status";
-    private static final String CMD_CANCEL_ORDER = "cancel_order";
-    private static final String CMD_CLEAR_MSG = "clear_msg";
-    private static final String CMD_PROCESS_PAYMENT = "process_payment";
-    private static final String CMD_REGISTER_RECEIPT = "reg_receipt";
-    private static final String CMD_RECEIPT_STATUS = "receipt_status";
-    private static final String CMD_CANCEL_RECEIPT = "cancel_receipt";
+
+    private static final String QUERY_PAYMENT_STATUS = "pay_status";
+    private static final String QUERY_CANCEL_ORDER = "cancel_order";
+    private static final String QUERY_CLEAR_MSG = "clear_msg";
+    private static final String QUERY_PROCESS_PAYMENT = "process_payment";
+    private static final String QUERY_REGISTER_RECEIPT = "reg_receipt";
+    private static final String QUERY_RECEIPT_STATUS = "receipt_status";
+    private static final String QUERY_CANCEL_RECEIPT = "cancel_receipt";
 
     @Produce("direct:sendMessage")
     ProducerTemplate producer;
@@ -52,62 +53,71 @@ public class BotCommandProcessor implements Processor {
     @Inject
     EventBus eventBus;
 
+    @Inject
+    PrePaymentsDao prePaymentsDao;
+
     // error handler
     Consumer<Throwable> failProcessing = fail -> producer.sendBody("‼️" + fail.getMessage());
 
+    /**
+     * hanlde error message
+     * 
+     * @param message
+     */
     @ConsumeEvent(value = "notify-error", blocking = true)
     public void notifyError(String message) {
         Log.error(message);
         producer.sendBody(Templates.notifyError(message).render());
     }
 
+    /**
+     * processing camel exchange from tg
+     */
     @Override
     public void process(Exchange exchange) throws Exception {
         Object incomingMessage = exchange.getIn().getBody();
-        if (incomingMessage instanceof IncomingMessage) {
-            processCommand(((IncomingMessage) incomingMessage).getText());
-        } else if (incomingMessage instanceof IncomingCallbackQuery) {
-            processCallback((IncomingCallbackQuery) incomingMessage);
+        if (incomingMessage instanceof IncomingMessage message) {
+            processCommand(message.getText());
+        } else if (incomingMessage instanceof IncomingCallbackQuery query) {
+            processCallback(query);
         }
     }
 
     private void processCallback(IncomingCallbackQuery callbackQuery) {
         Log.infof("Process callback [%s]", callbackQuery.getData());
 
-        // parse command
-        String[] command = callbackQuery.getData().split(":");
-        // get messageId
-        int messageId = callbackQuery.getMessage().getMessageId().intValue();
-        // get chatId
-        String chatId = callbackQuery.getMessage().getChat().getId();
+        var queryType = callbackQuery.getData().split(":")[0];
+        var queryParams = Arrays.asList(callbackQuery.getData().split(":"));
+        var messageId = callbackQuery.getMessage().getMessageId().intValue();
+        var chatId = callbackQuery.getMessage().getChat().getId();
 
         // replay confirm to command
         OutgoingCallbackQueryMessage msg = new OutgoingCallbackQueryMessage();
         msg.setCallbackQueryId(callbackQuery.getId());
-        msg.setText(command[0]);
+        msg.setText(queryType);
         producer.sendBody(msg);
 
         // process command
-        switch (command[0]) {
-            case CMD_PAYMENT_STATUS:
-                callbackPaymentStatus(command[1], messageId);
+        switch (queryType) {
+            case QUERY_PAYMENT_STATUS:
+                callbackPaymentStatus(queryParams.get(1), messageId);
                 break;
-            case CMD_CANCEL_ORDER:
-                doCancelOrder(command[1], messageId);
+            case QUERY_CANCEL_ORDER:
+                doCancelOrder(queryParams.get(1), messageId);
                 break;
-            case CMD_RECEIPT_STATUS:
-                getOperationStatus(command[1], messageId);
+            case QUERY_RECEIPT_STATUS:
+                getOperationStatus(queryParams.get(1), messageId);
                 break;
-            case CMD_REGISTER_RECEIPT:
-                doRegisterReceipt(command[1], messageId);
+            case QUERY_REGISTER_RECEIPT:
+                doRegisterReceipt(queryParams.get(1), messageId);
                 break;
-            case CMD_CANCEL_RECEIPT:
-                doCancelRegister(command[1], messageId);
+            case QUERY_CANCEL_RECEIPT:
+                doCancelRegister(queryParams.get(1), messageId);
                 break;
-            case CMD_PROCESS_PAYMENT:
-                doProcessPayment(command[1], command[2], messageId);
+            case QUERY_PROCESS_PAYMENT:
+                doProcessPayment(queryParams.get(1), queryParams.get(2), messageId);
                 break;
-            case CMD_CLEAR_MSG:
+            case QUERY_CLEAR_MSG:
                 producer.sendBody(new EditMessageDelete(chatId, messageId));
                 break;
             default:
@@ -119,17 +129,10 @@ public class BotCommandProcessor implements Processor {
         Log.infof("Process command [%s]", command);
 
         switch (command) {
-            case CMD_START:
-                producer.sendBody("Starting LBPAY Notify Bot");
-                break;
-            case CMD_PENDING_ORDERS:
-                getPendingOrders();
-                break;
-            case CMD_WAITING_RECEIPTS:
-                getWaitingReceipts();
-                break;
-            default:
-                Log.warnf("Unknown command: %s", command);
+            case CMD_START -> producer.sendBody("Starting LBPAY Notify Bot");
+            case CMD_PENDING_ORDERS -> getPendingOrders();
+            case CMD_WAITING_RECEIPTS -> getWaitingReceipts();
+            default -> Log.warnf("Unknown command: %s", command);
         }
     }
 
@@ -161,13 +164,13 @@ public class BotCommandProcessor implements Processor {
 
     private InlineKeyboardMarkup receiptKeyboardMarkup(DreamkasOperation receipt) {
         InlineKeyboardButton btnReg = InlineKeyboardButton.builder()
-                .text("🏦 Register").callbackData(CMD_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
+                .text("🏦 Register").callbackData(QUERY_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
-                .text("🚮 Отмена").callbackData(CMD_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
+                .text("🚮 Отмена").callbackData(QUERY_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnStatus = InlineKeyboardButton.builder()
-                .text("🔁 Status").callbackData(CMD_RECEIPT_STATUS + ":" + receipt.operationId).build();
+                .text("🔁 Status").callbackData(QUERY_RECEIPT_STATUS + ":" + receipt.operationId).build();
 
         if (receipt.operationId == null || receipt.operationStatus == OperationStatus.ERROR) {
             return InlineKeyboardMarkup.builder()
@@ -241,28 +244,26 @@ public class BotCommandProcessor implements Processor {
     }
 
     private void getPendingOrders() {
-        // audit.getPendingOrders().collect().asList().subscribe().with(
-        //         orders -> {
-        //             if (orders.size() == 0) {
-        //                 producer.sendBody("🤷 no pending orders");
-        //             } else {
-        //                 orders.forEach(order -> {
-        //                     OutgoingTextMessage msg = OutgoingTextMessage.builder()
-        //                             .text(Templates.order(order).render())
-        //                             .parseMode("HTML")
-        //                             .replyMarkup(
-        //                                     InlineKeyboardMarkup.builder()
-        //                                             .addRow(Arrays.asList(InlineKeyboardButton.builder()
-        //                                                     .text("🔁 Status")
-        //                                                     .callbackData(CMD_PAYMENT_STATUS + ":" + order.orderNumber())
-        //                                                     .build()))
-        //                                             .build())
-        //                             .build();
-        //                     producer.sendBody(msg);
-        //                 });
-        //             }
-        //         },
-        //         failProcessing);
+        var orders = prePaymentsDao.getPendingOrders();
+
+        if (orders.isEmpty()) {
+            producer.sendBody("🤷 no pending orders");
+        } else {
+            orders.forEach(order -> {
+                OutgoingTextMessage msg = OutgoingTextMessage.builder()
+                        .text(Templates.order(order).render())
+                        .parseMode("HTML")
+                        .replyMarkup(
+                                InlineKeyboardMarkup.builder()
+                                        .addRow(Arrays.asList(InlineKeyboardButton.builder()
+                                                .text("🔁 Status")
+                                                .callbackData(QUERY_PAYMENT_STATUS + ":" + order.orderNumber())
+                                                .build()))
+                                        .build())
+                        .build();
+                producer.sendBody(msg);
+            });
+        }
     }
 
     private void callbackPaymentStatus(String orderNumber, int messageId) {
@@ -282,7 +283,7 @@ public class BotCommandProcessor implements Processor {
                                         InlineKeyboardMarkup
                                                 .builder()
                                                 .addRow(Arrays.asList(InlineKeyboardButton.builder().text("💳 payment")
-                                                        .callbackData(CMD_PROCESS_PAYMENT + ":" +
+                                                        .callbackData(QUERY_PROCESS_PAYMENT + ":" +
                                                                       orderNumber + ":" +
                                                                       json.getJsonArray("attributes").getJsonObject(0)
                                                                               .getString("value"))
@@ -300,7 +301,7 @@ public class BotCommandProcessor implements Processor {
                                         InlineKeyboardMarkup
                                                 .builder()
                                                 .addRow(Arrays.asList(InlineKeyboardButton.builder().text("🚮 cancel")
-                                                        .callbackData(CMD_CANCEL_ORDER + ":" + orderNumber).build()))
+                                                        .callbackData(QUERY_CANCEL_ORDER + ":" + orderNumber).build()))
                                                 .build())
                                 .build();
                     } else {
@@ -314,7 +315,7 @@ public class BotCommandProcessor implements Processor {
                                         InlineKeyboardMarkup
                                                 .builder()
                                                 .addRow(Arrays.asList(InlineKeyboardButton.builder().text("🚮 cancel")
-                                                        .callbackData(CMD_CANCEL_ORDER + ":" + orderNumber).build()))
+                                                        .callbackData(QUERY_CANCEL_ORDER + ":" + orderNumber).build()))
                                                 .build())
                                 .build();
                     }

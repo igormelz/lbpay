@@ -25,8 +25,6 @@ import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
-import ru.openfs.lbpay.model.ReceiptCustomerInfo;
-import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.SberOnlineCheckResponse;
 import ru.openfs.lbpay.model.SberOnlinePaymentResponse;
 import ru.openfs.lbpay.model.SberOnlineRequest;
@@ -66,7 +64,8 @@ public class SberOnlineService {
                     .filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
                     .filter(agrm -> agrm.getClosedon().isBlank())
                     .findFirst().map(agrm -> new SberOnlineCheckResponse(
-                            agrm.getBalance(), lbSoapClient.getRecomendedPayment(sessionId, agrm.getAgrmid()),
+                            agrm.getBalance(),
+                            lbSoapClient.getRecomendedPayment(sessionId, agrm.getAgrmid()),
                             (acctInfo.getAddresses().isEmpty()) ? null : acctInfo.getAddresses().get(0).getAddress()))
                     .orElseThrow(() -> new SberOnlineException(ACCOUNT_INACTIVE, "check inactive account: " + account));
 
@@ -94,12 +93,17 @@ public class SberOnlineService {
             // payment is ok? 
             return lbSoapClient.findPayment(sessionId, request.payId())
                     .map(payment -> {
-                        // invoke receipt 
+                        
                         lbSoapClient.findAccountByAgrmNum(sessionId, request.account()).ifPresent(acct -> {
+                            // invoke receipt 
                             eventBus.send("register-receipt",
-                                    ReceiptOrderBuilder.createReceiptOrder(UUID.randomUUID().toString(), request.payId(),
-                                            request.amount(), request.account(),
-                                            acct.getAccount().getEmail(), acct.getAccount().getMobile()));
+                                    ReceiptOrderBuilder.createReceiptOrder(
+                                            UUID.randomUUID().toString(),
+                                            request.payId(),
+                                            request.amount(),
+                                            request.account(),
+                                            acct.getAccount().getEmail(),
+                                            acct.getAccount().getMobile()));
                         });
 
                         Log.infof("paid orderNumber:[%s], account:[%s], amount:[%.2f]",

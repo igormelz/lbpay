@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.bot;
+package ru.openfs.lbpay.route;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import ru.openfs.lbpay.components.BotCommandProcessor;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.telegram.TelegramConstants;

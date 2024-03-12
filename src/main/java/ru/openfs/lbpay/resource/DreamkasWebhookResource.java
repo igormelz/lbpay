@@ -22,8 +22,8 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.MediaType;
 
 import io.quarkus.logging.Log;
+import io.vertx.core.json.JsonObject;
 import ru.openfs.lbpay.dto.dreamkas.Operation;
-import ru.openfs.lbpay.dto.dreamkas.Webhook;
 import ru.openfs.lbpay.service.ReceiptService;
 
 @Path("/pay/dreamkas")
@@ -34,25 +34,26 @@ public class DreamkasWebhookResource {
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    public void callback(Webhook webhook) {
+    public void callback(JsonObject webhook) {
         Log.debug("start processing webhook:" + webhook);
 
-        switch (webhook.type()) {
+        switch (webhook.getString("type")) {
 
-            case RECEIPT -> Log.infof("OFD shift: %d, doc: %s",
-                    webhook.data().getLong("shiftId"),
-                    webhook.data().getString("fiscalDocumentNumber"));
+            case "RECEIPT" -> Log.infof("OFD shift: %d, doc: %s",
+                    webhook.getJsonObject("data").getLong("shiftId"),
+                    webhook.getJsonObject("data").getString("fiscalDocumentNumber"));
 
-            case OPERATION -> {
+            case "OPERATION" -> {
                 try {
-                    var operation = webhook.data().mapTo(Operation.class);
+                    var operation = webhook.getJsonObject("data").mapTo(Operation.class);
+                    Log.debug(operation);
                     receiptService.processReceiptOperation(operation);
                 } catch (IllegalArgumentException e) {
                     Log.error("mapping webhook data to operation:" + e.getMessage());
                 }
             }
 
-            default -> Log.info("unhandled webhook type:" + webhook.type());
+            default -> Log.info("unhandled webhook type:" + webhook.getString("type"));
         }
     }
 

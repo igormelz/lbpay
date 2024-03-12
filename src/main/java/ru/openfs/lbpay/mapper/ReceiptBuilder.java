@@ -33,7 +33,8 @@ public class ReceiptBuilder {
 
         if (!isValid(receiptOrder.info()))
             throw new PaymentException(
-                    "bad customer:" + receiptOrder.info() + " for [" + receiptOrder.orderNumber() + "]");
+                    "wrong " + receiptOrder.info() + " for [" + receiptOrder.orderNumber() + "] account:["
+                                       + receiptOrder.account() + "]");
 
         // calc service price to coins
         var price = (int) (receiptOrder.amount() * 100);

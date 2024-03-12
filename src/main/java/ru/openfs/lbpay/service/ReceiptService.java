@@ -57,9 +57,24 @@ public class ReceiptService {
                 }, () -> Log.error("no response"));
 
             } catch (RuntimeException e) {
-                Log.error(e.getMessage());
                 eventBus.send("notify-error", e.getMessage());
             }
+        }
+    }
+
+    /**
+     * call dk to get operation status 
+     * 
+     * @param operationId
+     * @return Operation
+     */
+    @ConsumeEvent("get-register-status")
+    public Operation getOperation(String operationId) {
+        try {
+            return dreamkasClient.getOperation(operationId);
+        } catch (RuntimeException e) {
+            eventBus.send("notify-error", e.getMessage());
+            return null;
         }
     }
 
@@ -114,11 +129,5 @@ public class ReceiptService {
         else
             Log.error("operation not updated");
     }
-
-    // @ConsumeEvent("dk-register-status")
-    // public Uni<JsonObject> getOperation(@PathParam("id") String operId) {
-    //     return client.get("/api/operations/" + operId).putHeader("Authorization", "Bearer " + token).send()
-    //             .onItem().transform(HttpResponse::bodyAsJsonObject);
-    // }
 
 }
