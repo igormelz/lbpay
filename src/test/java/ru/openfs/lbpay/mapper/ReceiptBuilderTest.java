@@ -26,11 +26,11 @@ class ReceiptBuilderTest {
         assertEquals(true, ReceiptBuilder.isValid(ok));
         assertEquals("+79001234567", ok.phone());
 
-        var phone = new ReceiptCustomerInfo(null, "+79001234567");
+        var phone = new ReceiptCustomerInfo("", "+79001234567");
         assertEquals(true, ReceiptBuilder.isValid(phone));
         assertEquals("+79001234567", phone.phone());
 
-        var email = new ReceiptCustomerInfo("1@a.com", null);
+        var email = new ReceiptCustomerInfo("1@a.com", "");
         assertEquals(true, ReceiptBuilder.isValid(email));
         assertEquals("1@a.com", email.email());
 

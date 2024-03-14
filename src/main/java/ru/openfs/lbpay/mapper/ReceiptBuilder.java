@@ -25,8 +25,8 @@ public class ReceiptBuilder {
     private ReceiptBuilder() {}
 
     static boolean isValid(ReceiptCustomerInfo info) {
-        return Optional.ofNullable(info.email()).map(email -> EMAIL.matcher(info.email()).matches())
-                .orElse(Optional.ofNullable(info.phone()).map(phone -> PHONE.matcher(phone).matches()).orElse(false));
+        return (info.email() != null && EMAIL.matcher(info.email()).matches())
+                || (info.phone() != null && PHONE.matcher(info.phone()).matches());
     }
 
     public static Receipt createReceipt(ReceiptOrder receiptOrder, Integer deviceId) {
