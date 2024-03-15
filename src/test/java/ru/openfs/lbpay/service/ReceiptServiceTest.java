@@ -9,14 +9,15 @@ import org.junit.jupiter.api.Test;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.client.DreamkasClient;
-import ru.openfs.lbpay.dto.dreamkas.Operation;
-import ru.openfs.lbpay.dto.dreamkas.type.OperationStatus;
-import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
+import ru.openfs.lbpay.client.dreamkas.DreamkasClient;
+import ru.openfs.lbpay.client.dreamkas.model.Operation;
+import ru.openfs.lbpay.client.dreamkas.model.type.OperationStatus;
+import ru.openfs.lbpay.model.ReceiptCustomer;
+import ru.openfs.lbpay.model.ReceiptOrder;
 
 @QuarkusTest
 class ReceiptServiceTest {
-    
+
     @InjectMock
     @RestClient
     DreamkasClient mock;
@@ -27,7 +28,8 @@ class ReceiptServiceTest {
     @Test
     void testRegisterReceipt() {
         when(mock.register(any())).thenReturn(new Operation("1", "1", null, OperationStatus.PENDING, null, null, null));
-        var rcpt = ReceiptOrderBuilder.createReceiptOrder("1", "1", 0.0, "1", "1@data.com", null);
+        var rcpt = new ReceiptOrder(
+                0.0, "1", "1", "1", new ReceiptCustomer("1@data.com", null));
         service.registerReceipt(rcpt);
     }
 

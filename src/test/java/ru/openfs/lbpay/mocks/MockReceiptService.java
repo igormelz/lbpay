@@ -2,7 +2,7 @@ package ru.openfs.lbpay.mocks;
 
 import io.quarkus.test.Mock;
 import jakarta.enterprise.context.ApplicationScoped;
-import ru.openfs.lbpay.dto.dreamkas.Operation;
+import ru.openfs.lbpay.client.dreamkas.model.Operation;
 import ru.openfs.lbpay.service.ReceiptService;
 
 @Mock

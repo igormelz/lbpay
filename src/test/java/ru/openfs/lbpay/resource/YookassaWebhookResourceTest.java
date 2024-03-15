@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test;
 
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.dto.yookassa.MetaData;
-import ru.openfs.lbpay.dto.yookassa.Payment;
-import ru.openfs.lbpay.dto.yookassa.Webhook;
+import ru.openfs.lbpay.client.yookassa.model.MetaData;
+import ru.openfs.lbpay.client.yookassa.model.Payment;
+import ru.openfs.lbpay.client.yookassa.model.Webhook;
 import ru.openfs.lbpay.mocks.MockPaymentService;
 
 @QuarkusTest

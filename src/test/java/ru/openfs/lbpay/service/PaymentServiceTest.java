@@ -10,7 +10,7 @@ import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.MockitoConfig;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.client.LbCoreSoapClient;
+import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
 
 @QuarkusTest
 class PaymentServiceTest {

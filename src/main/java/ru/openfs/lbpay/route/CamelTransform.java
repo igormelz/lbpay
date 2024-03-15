@@ -16,7 +16,7 @@
 package ru.openfs.lbpay.route;
 
 import jakarta.inject.Singleton;
-import ru.openfs.lbpay.dto.sberonline.Message;
+import ru.openfs.lbpay.resource.sberonline.model.SberOnlineMessage;
 
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.converter.jaxb.JaxbDataFormat;
@@ -34,7 +34,7 @@ public class CamelTransform extends RouteBuilder {
                 new ServiceInterfaceStrategy(api3.Api3PortType.class, true));
 
         // define format for SberOnline
-        JaxbDataFormat sberOnline = new JaxbDataFormat(Message.class.getPackage().getName());
+        JaxbDataFormat sberOnline = new JaxbDataFormat(SberOnlineMessage.class.getPackage().getName());
 
         // marshal sberonline message
         from("direct:marshalSberOnline").id("MarshalSberOnline").marshal(sberOnline);

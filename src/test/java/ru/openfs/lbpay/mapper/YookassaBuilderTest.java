@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import ru.openfs.lbpay.client.yookassa.mapper.YookassaBuilder;
+
 class YookassaBuilderTest {
     @Test
     void testCreateRequest() {

@@ -3,7 +3,6 @@ package ru.openfs.lbpay.service;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import io.quarkus.logging.Log;
@@ -12,17 +11,17 @@ import io.vertx.mutiny.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import ru.openfs.lbpay.client.DreamkasClient;
-import ru.openfs.lbpay.dto.dreamkas.Operation;
-import ru.openfs.lbpay.mapper.ReceiptBuilder;
+import ru.openfs.lbpay.client.dreamkas.DreamkasClient;
+import ru.openfs.lbpay.client.dreamkas.mapper.ReceiptBuilder;
+import ru.openfs.lbpay.client.dreamkas.model.Operation;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @ApplicationScoped
 public class ReceiptService {
 
-    @ConfigProperty(name = "dreamkas.deviceId")
-    Integer deviceId;
+    @Inject
+    ReceiptBuilder receiptBuilder;
 
     @Inject
     EventBus eventBus;
@@ -46,13 +45,12 @@ public class ReceiptService {
         if (receiptOperation.isPersistent()) {
             try {
                 // call to register
-                var receipt = ReceiptBuilder.createReceipt(receiptOrder, deviceId);
+                var receipt = receiptBuilder.createReceipt(receiptOrder);
                 Log.debugf("Create receipt: %s", receipt);
 
                 var response = dreamkasClient.register(receipt);
                 Optional.ofNullable(response).ifPresentOrElse(it -> {
-                    // update auditEntry
-                    updateReceiptOperation(receiptOperation, response);
+                    updateReceiptOperation(receiptOperation, it);
                     Log.infof("Receipt for [%s]: %s with operation: %s", receiptOrder.orderNumber(), it.status(), it.id());
                 }, () -> Log.error("no response"));
 
@@ -63,10 +61,10 @@ public class ReceiptService {
     }
 
     /**
-     * call dk to get operation status 
+     * call dk to get operation status
      * 
-     * @param operationId
-     * @return Operation
+     * @param  operationId
+     * @return             Operation
      */
     @ConsumeEvent("get-register-status")
     public Operation getOperation(String operationId) {

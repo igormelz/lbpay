@@ -26,10 +26,10 @@ import io.quarkus.panache.common.Sort;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import ru.openfs.lbpay.dto.dreamkas.type.OperationStatus;
-import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
+import ru.openfs.lbpay.client.dreamkas.model.type.OperationStatus;
 import ru.openfs.lbpay.model.PrePaymentsDao;
-import ru.openfs.lbpay.model.Templates;
+import ru.openfs.lbpay.model.ReceiptCustomer;
+import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @Singleton
@@ -152,12 +152,12 @@ public class BotCommandProcessor implements Processor {
     @Transactional
     public void doRegisterReceipt(String orderNumber, int messageId) {
         DreamkasOperation.findByOrderNumber(orderNumber).ifPresent(receipOperation -> {
-            if (receipOperation.operationId == null) {
-                Log.infof("Re-Processing not registered orderNumber: %s", orderNumber);
-                eventBus.send("register-receipt", ReceiptOrderBuilder.createReceiptOrderFromOperation(receipOperation));
-            } else if (receipOperation.operationStatus == OperationStatus.ERROR) {
-                Log.infof("Re-Processing error orderNumber: %s", orderNumber);
-                eventBus.send("register-receipt", ReceiptOrderBuilder.createReceiptOrderFromOperation(receipOperation));
+            if (receipOperation.operationId == null || receipOperation.operationStatus == OperationStatus.ERROR) {
+                Log.infof("Re-Processing orderNumber: %s", orderNumber);
+                eventBus.send("register-receipt",
+                        new ReceiptOrder(
+                                receipOperation.amount, receipOperation.orderNumber, receipOperation.account,
+                                receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone)));
             }
         });
     }
