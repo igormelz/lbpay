@@ -2,11 +2,11 @@ package ru.openfs.lbpay.mocks;
 
 import io.quarkus.test.Mock;
 import jakarta.enterprise.context.ApplicationScoped;
-import ru.openfs.lbpay.service.checkout.CheckoutServiceIF;
+import ru.openfs.lbpay.service.CheckoutService;
 
 @Mock
 @ApplicationScoped
-public class MockCheckoutService implements CheckoutServiceIF {
+public class MockCheckoutService implements CheckoutService {
 
     @Override
     public boolean isActiveAccount(String account) {

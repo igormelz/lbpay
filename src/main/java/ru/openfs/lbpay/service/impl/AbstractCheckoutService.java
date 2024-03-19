@@ -13,13 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service.checkout;
+package ru.openfs.lbpay.service.impl;
 
 import io.quarkus.logging.Log;
 import ru.openfs.lbpay.resource.checkout.exception.CheckoutException;
+import ru.openfs.lbpay.service.CheckoutService;
 import ru.openfs.lbpay.service.LbCoreService;
 
-public abstract class AbstractCheckoutService extends LbCoreService {
+public abstract class AbstractCheckoutService extends LbCoreService implements CheckoutService {
 
     /**
      * validate if account is active

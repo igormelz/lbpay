@@ -13,15 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.client.yookassa.model;
+package ru.openfs.lbpay.service;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-
-@JsonInclude(Include.NON_NULL)
-public record Confirmation(
-    String type,
-    @JsonProperty("return_url") String returnUrl,
-    @JsonProperty("confirmation_url") String confirmationUrl
-) {}
+public interface CheckoutService {
+    boolean isActiveAccount(String account);
+    String processCheckout(String account, Double amount);
+}

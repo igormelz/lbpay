@@ -15,7 +15,7 @@ import ru.openfs.lbpay.client.yookassa.YookassaClient;
 import ru.openfs.lbpay.client.yookassa.model.Confirmation;
 import ru.openfs.lbpay.client.yookassa.model.Payment;
 import ru.openfs.lbpay.resource.checkout.exception.CheckoutException;
-import ru.openfs.lbpay.service.checkout.YookassaCheckoutService;
+import ru.openfs.lbpay.service.impl.YookassaCheckoutService;
 
 @QuarkusTest
 class YookassaCheckoutServiceTest {

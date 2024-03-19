@@ -30,7 +30,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response.Status;
 import ru.openfs.lbpay.resource.checkout.exception.CheckoutException;
-import ru.openfs.lbpay.service.checkout.CheckoutServiceIF;
+import ru.openfs.lbpay.service.CheckoutService;
 
 @Path("/pay/checkout")
 public class CheckoutResource {
@@ -45,7 +45,7 @@ public class CheckoutResource {
     int amountMax;
 
     @Inject
-    CheckoutServiceIF checkoutService;
+    CheckoutService checkoutService;
 
     @ServerExceptionMapper
     public RestResponse<String> mapException(CheckoutException x) {

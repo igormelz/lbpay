@@ -1,3 +1,5 @@
+#!/bin/bash
+__lic=$(cat <<EOF
 /*
  * Copyright 2021-2024 OpenFS.RU
  *
@@ -13,15 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.client.yookassa.model;
+EOF
+)
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-
-@JsonInclude(Include.NON_NULL)
-public record Confirmation(
-    String type,
-    @JsonProperty("return_url") String returnUrl,
-    @JsonProperty("confirmation_url") String confirmationUrl
-) {}
+for fn in `find src/main/java/ru/openfs/lbpay  -name '*.java'`
+do
+	echo -n $fn
+	islic=$(head -1 $fn)
+    if [[ "$islic" =~ ^package.*$ ]]; then
+		echo "$__lic" > 1
+		cat $fn >> 1
+		mv 1 $fn
+		echo " Updated"
+	else
+		echo " LIC"
+	fi
+done
