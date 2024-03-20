@@ -15,16 +15,21 @@
  */
 package ru.openfs.lbpay.service;
 
+import api3.SoapAccountFull;
 import io.quarkus.logging.Log;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.PaymentException;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
 
 @ApplicationScoped
-public class PaymentService extends LbCoreService {
+public class PaymentService {
+
+    @Inject
+    LbCoreSoapClient lbCoreSoapClient;
 
     @Inject
     EventBus eventBus;
@@ -37,40 +42,31 @@ public class PaymentService extends LbCoreService {
      */
     public void processPayment(Long orderNumber, String mdOrder) {
         Log.debugf("start payment for:[%d]", orderNumber);
+        try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
-        final String sessionId = getSession();
-
-        try {
-            var order = lbCoreSoapClient.findOrderNumber(sessionId, orderNumber)
+            var order = adapter.findPrePaymentByOrderNumber(orderNumber)
                     .orElseThrow(() -> new PaymentException("orderNumber not found for:[" + orderNumber + "]"));
 
+            // test duplicate 
             if (order.getStatus() != 0) {
                 Log.warnf("orderNumber:[" + orderNumber + "] was paid at " + order.getPaydate());
-            } else {
-                lbCoreSoapClient.confirmPrePayment(sessionId, orderNumber, order.getAmount(), mdOrder);
-
-                var acct = lbCoreSoapClient.findAccountByAgrmId(sessionId, order.getAgrmid()).orElseThrow();
-                var agrm = acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
-                        .orElseThrow();
-                Log.infof("paid orderNumber:[%d], account:[%s], amount:[%.2f]",
-                        orderNumber, agrm.getNumber(), order.getAmount());
-
-                eventBus.send("register-receipt",
-                        new ReceiptOrder(
-                                order.getAmount(),
-                                String.valueOf(orderNumber),
-                                agrm.getNumber(),
-                                mdOrder,
-                                new ReceiptCustomer(
-                                        acct.getAccount().getEmail(),
-                                        acct.getAccount().getMobile())));
+                return;
             }
 
-        } catch (RuntimeException e) {
+            // do payment
+            adapter.confirmPrePayment(orderNumber, order.getAmount(), mdOrder);
+
+            var acct = adapter.findAccountByAgreementId(order.getAgrmid()).orElseThrow();
+            var agrm = acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
+                    .orElseThrow();
+            Log.infof("Process payment orderNumber:[%d], account:[%s], amount:[%.2f]",
+                    orderNumber, agrm.getNumber(), order.getAmount());
+
+            createReceiptOrder(order.getAmount(), String.valueOf(orderNumber), agrm.getNumber(), mdOrder, acct);
+
+        } catch (Exception e) {
             eventBus.send("notify-error", String.format("orderNumber:[%d] deposited: %s", orderNumber, e.getMessage()));
             throw new PaymentException(e.getMessage());
-        } finally {
-            closeSession(sessionId);
         }
     }
 
@@ -81,24 +77,33 @@ public class PaymentService extends LbCoreService {
      */
     public void processDecline(long orderNumber) {
         Log.debugf("start decline orderNumber: [%d]", orderNumber);
-        final String sessionId = getSession();
+        try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
-        try {
-            var order = lbCoreSoapClient.findOrderNumber(sessionId, orderNumber)
+            var order = adapter.findPrePaymentByOrderNumber(orderNumber)
                     .orElseThrow(() -> new PaymentException("not found orderNumber:[" + orderNumber + "]"));
 
             if (order.getStatus() != 0) {
                 Log.warnf("orderNumber:[" + orderNumber + "] was declined at " + order.getPaydate());
-            } else {
-                lbCoreSoapClient.cancelPrePayment(sessionId, orderNumber);
-                Log.infof("declined orderNumber:[%d]", orderNumber);
+                return;
             }
 
-        } catch (RuntimeException e) {
-            eventBus.send("notify-error", String.format("orderNumber:[%d] declined: %s", orderNumber, e.getMessage()));
+            // do cancel
+            adapter.cancelPrePayment(orderNumber);
+            Log.infof("declined orderNumber:[%d]", orderNumber);
+
+        } catch (Exception e) {
+            eventBus.send("notify-error",
+                    String.format("declined orderNumber:[%d] - %s", orderNumber, e.getMessage()));
             throw new PaymentException(e.getMessage());
-        } finally {
-            closeSession(sessionId);
         }
+    }
+
+    private void createReceiptOrder(
+            double amount, String orderNumber, String account, String externalId, SoapAccountFull acctInfo) {
+        eventBus.send("register-receipt", new ReceiptOrder(
+                amount, orderNumber, account, externalId,
+                new ReceiptCustomer(
+                        acctInfo.getAccount().getEmail(),
+                        acctInfo.getAccount().getMobile())));
     }
 }

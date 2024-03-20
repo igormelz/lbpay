@@ -19,10 +19,13 @@ import static ru.openfs.lbpay.resource.sberonline.model.SberOnlineResponseType.*
 
 import java.util.UUID;
 
+import api3.SoapAccountFull;
+import api3.SoapPaymentFull;
 import io.quarkus.logging.Log;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.resource.sberonline.exception.SberOnlineException;
@@ -30,106 +33,111 @@ import ru.openfs.lbpay.resource.sberonline.model.SberOnlineMessage;
 import ru.openfs.lbpay.resource.sberonline.model.SberOnlineRequest;
 
 @ApplicationScoped
-public class SberOnlineService extends LbCoreService {
+public class SberOnlineService {
+
+    @Inject
+    LbCoreSoapClient lbCoreSoapClient;
 
     @Inject
     EventBus eventBus;
 
     public SberOnlineMessage processRequest(SberOnlineRequest request) {
-        if (request.isCheckOperation())
+        if (request.isCheckOperation() == Boolean.TRUE)
             return processCheckAccount(request.account());
         return processPayment(request);
     }
 
     private SberOnlineMessage processCheckAccount(String account) {
-        final String sessionId = getSession();
-        try {
+        try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
-            var acctInfo = lbCoreSoapClient.findAccountByAgrmNum(getSession(), account)
+            var acctInfo = adapter.findAccountInfo(account)
                     .orElseThrow(() -> new SberOnlineException(
-                            ACCOUNT_NOT_FOUND, "not found account:" + account));
+                            ACCOUNT_NOT_FOUND, String.format("check account:[%s] not found", account)));
 
             return acctInfo.getAgreements().stream()
                     .filter(agrm -> agrm.getNumber().equalsIgnoreCase(account))
                     .filter(agrm -> agrm.getClosedon().isBlank())
                     .findFirst()
-                    .map(agrm -> new SberOnlineMessage.Builder()
-                            .responseType(OK)
-                            .setBalance(agrm.getBalance())
-                            .setRecSum(lbCoreSoapClient.getRecomendedPayment(sessionId, agrm.getAgrmid()))
-                            .setAddress(acctInfo.getAddresses().isEmpty() ? null : acctInfo.getAddresses().get(0).getAddress())
-                            .build())
-                    .orElseThrow(() -> new SberOnlineException(ACCOUNT_INACTIVE, "check inactive account: " + account));
+                    .map(agrm -> responseCheck(agrm.getBalance(), adapter.getRecomendedPayment(agrm.getAgrmid()), acctInfo))
+                    .orElseThrow(() -> new SberOnlineException(
+                            ACCOUNT_INACTIVE, String.format("check account:[%s] inactive", account)));
 
-        } catch (RuntimeException e) {
-            if (e.getMessage() != null && e.getMessage().contains("not found")) {
-                throw new SberOnlineException(ACCOUNT_NOT_FOUND, "account not found:" + account);
-            }
-            // propagate exception
-            if (e instanceof SberOnlineException)
-                throw e;
-            // raise other
+        } catch (SberOnlineException soe) {
+            throw soe;
+        } catch (Exception e) {
             throw new SberOnlineException(TMP_ERR, e.getMessage());
-        } finally {
-            closeSession(sessionId);
         }
     }
 
     private SberOnlineMessage processPayment(SberOnlineRequest request) {
-        final String sessionId = getSession();
-        try {
-            // do payment
-            var paymentId = lbCoreSoapClient.sberOnlinePayment(
-                    getSession(), request.payId(), request.account(), request.amount(), request.payDate());
+        try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
-            // payment is ok? 
-            return lbCoreSoapClient.findPayment(sessionId, request.payId())
-                    .map(payment -> {
-                        lbCoreSoapClient.findAccountByAgrmNum(sessionId, request.account())
-                                .ifPresent(acct -> {
-                                    // invoke receipt 
-                                    eventBus.send("register-receipt",
-                                            new ReceiptOrder(
-                                                    request.amount(),
-                                                    request.payId(),
-                                                    request.account(),
-                                                    UUID.randomUUID().toString(),
-                                                    new ReceiptCustomer(
-                                                            acct.getAccount().getEmail(),
-                                                            acct.getAccount().getMobile())));
-                                });
-                        Log.infof("paid [%s], account:[%s], amount:[%.2f]",
-                                request.payId(), request.account(), request.amount());
-                        return new SberOnlineMessage.Builder()
-                                .responseType(OK)
-                                .setExtId(paymentId)
-                                .setSum(request.amount())
-                                .setRegDate(payment.getPay().getLocaldate())
-                                .build();
-                    })
-                    .orElseThrow();
+            // validate account
+            var acctInfo = adapter.findAccountInfo(request.account())
+                    .orElseThrow(() -> new SberOnlineException(
+                            ACCOUNT_NOT_FOUND, String.format("paid account:[%s] not found", request.account())));
 
-        } catch (RuntimeException e) {
-            if (e.getMessage().contains("not found"))
-                throw new SberOnlineException(ACCOUNT_NOT_FOUND, "account not found:" + request.account());
-
-            if (e.getMessage().contains("already exists")) {
-                Log.warnf("payment orderNumber: %s has already processed", request.payId());
-                return lbCoreSoapClient.findPayment(sessionId, request.payId())
-                        .map(p -> new SberOnlineMessage.Builder()
-                                .responseType(PAY_TRX_DUPLICATE)
-                                .setExtId(p.getPay().getRecordid())
-                                .setRegDate(p.getPay().getLocaldate())
-                                .setAmount(p.getAmountcurr())
-                                .build())
-                        .orElseThrow(() -> new SberOnlineException(TMP_ERR, e.getMessage()));
+            var existPayment = adapter.findPayment(request.payId());
+            if (existPayment.isPresent()) {
+                Log.warnf("duplicate payment: [%s]", request.payId());
+                return responseDuplicate(existPayment.get());
             }
 
-            eventBus.send("notify-error", String.format("payment orderNumber: %s - %s", request.payId(), e.getMessage()));
-            throw new SberOnlineException(TMP_ERR, e.getMessage());
+            // do payment
+            var paymentId = adapter.sberOnlinePayment(
+                    request.payId(), request.account(), request.amount(), request.payDate());
 
-        } finally {
-            closeSession(sessionId);
+            // get payment info
+            var payment = adapter.findPayment(request.payId())
+                    .orElseThrow(() -> new SberOnlineException(TMP_ERR, "payment not processed"));
+
+            // invoke receipt 
+            createReceiptOrder(request.amount(), request.payId(), request.account(), acctInfo);
+
+            Log.infof("Processed payment orderNumber:[%s], account: %s, amount:%.2f",
+                    request.payId(), request.account(), request.amount());
+
+            return responsePayment(paymentId, request.amount(), payment.getPay().getLocaldate());
+
+        } catch (Exception e) {
+            eventBus.send("notify-error",
+                    String.format("payment orderNumber: %s - %s", request.payId(), e.getMessage()));
+            throw new SberOnlineException(TMP_ERR, e.getMessage());
         }
+    }
+
+    private SberOnlineMessage responseCheck(double balance, double recSum, SoapAccountFull acctInfo) {
+        return new SberOnlineMessage.Builder()
+                .responseType(OK)
+                .setBalance(balance)
+                .setRecSum(recSum)
+                .setAddress(acctInfo.getAddresses().isEmpty() ? null : acctInfo.getAddresses().get(0).getAddress())
+                .build();
+    }
+
+    private SberOnlineMessage responseDuplicate(SoapPaymentFull existingPayment) {
+        return new SberOnlineMessage.Builder()
+                .responseType(PAY_TRX_DUPLICATE)
+                .setExtId(existingPayment.getPay().getRecordid())
+                .setRegDate(existingPayment.getPay().getLocaldate())
+                .setAmount(existingPayment.getAmountcurr())
+                .build();
+    }
+
+    private SberOnlineMessage responsePayment(long paymentId, double amount, String regDate) {
+        return new SberOnlineMessage.Builder()
+                .responseType(OK)
+                .setExtId(paymentId)
+                .setSum(amount)
+                .setRegDate(regDate)
+                .build();
+    }
+
+    private void createReceiptOrder(double amount, String orderNumber, String account, SoapAccountFull acctInfo) {
+        eventBus.send("register-receipt", new ReceiptOrder(
+                amount, orderNumber, account, UUID.randomUUID().toString(),
+                new ReceiptCustomer(
+                        acctInfo.getAccount().getEmail(),
+                        acctInfo.getAccount().getMobile())));
     }
 }

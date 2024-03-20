@@ -16,11 +16,15 @@
 package ru.openfs.lbpay.service.impl;
 
 import io.quarkus.logging.Log;
+import jakarta.inject.Inject;
+import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
 import ru.openfs.lbpay.resource.checkout.exception.CheckoutException;
 import ru.openfs.lbpay.service.CheckoutService;
-import ru.openfs.lbpay.service.LbCoreService;
 
-public abstract class AbstractCheckoutService extends LbCoreService implements CheckoutService {
+public abstract class AbstractCheckoutService implements CheckoutService {
+
+    @Inject
+    LbCoreSoapClient lbCoreSoapClient;
 
     /**
      * validate if account is active
@@ -29,11 +33,10 @@ public abstract class AbstractCheckoutService extends LbCoreService implements C
      * @return         TRUE if active, FALSE otherwise
      */
     public boolean isActiveAccount(String account) {
-        final String sessionId = getSession();
-        try {
-            return lbCoreSoapClient.isActiveAgreement(sessionId, account);
-        } finally {
-            lbCoreSoapClient.logout(sessionId);
+        try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
+            return adapter.isActiveAccount(account);
+        } catch (Exception e) {
+            throw new CheckoutException(e.getMessage());
         }
     }
 
@@ -46,24 +49,20 @@ public abstract class AbstractCheckoutService extends LbCoreService implements C
      */
     public String processCheckout(String account, Double amount) {
         Log.infof("checkout account: %s, amount: %.2f", account, amount);
-        final String sessionId = getSession();
-        try {
+        try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             // get active agreement id
-            var agrmId = lbCoreSoapClient.getAgreementId(sessionId, account);
-            if (agrmId == 0)
-                throw new CheckoutException("account inactive");
+            var agrmId = adapter.getAgreementIdByAccount(account)
+                    .orElseThrow(() -> new CheckoutException("account inactive"));
 
             // create prepayment ordernumber
-            var orderNumber = lbCoreSoapClient.createOrderNumber(sessionId, agrmId, amount);
+            var orderNumber = adapter.createOrderNumber(agrmId, amount);
 
             // create payement
             return createPayment(orderNumber, account, amount);
 
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             throw new CheckoutException(e.getMessage());
-        } finally {
-            lbCoreSoapClient.logout(sessionId);
         }
     }
 
