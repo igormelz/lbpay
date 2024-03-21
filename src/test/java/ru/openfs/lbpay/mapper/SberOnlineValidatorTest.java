@@ -11,7 +11,7 @@ import ru.openfs.lbpay.resource.sberonline.exception.SberOnlineException;
 import ru.openfs.lbpay.resource.sberonline.model.SberOnlineResponseType;
 import ru.openfs.lbpay.resource.sberonline.validator.SberOnlineValidator;
 
-class SberOnlineMapperTest {
+class SberOnlineValidatorTest {
 
     @Test
     void testValidateRequestCheck() {
@@ -31,7 +31,7 @@ class SberOnlineMapperTest {
         assertEquals("12345", req.account());
 
         SberOnlineException ex = assertThrows(SberOnlineException.class,
-                () -> SberOnlineValidator.validateRequest("payment", "12345", null, null, null));
+                () -> SberOnlineValidator.validateRequest("payment", "12345", 0.0, "1", "13.02.2024_12:00:01"));
         assertEquals(SberOnlineResponseType.PAY_AMOUNT_TOO_SMALL, ex.getResponse());
     }
 
