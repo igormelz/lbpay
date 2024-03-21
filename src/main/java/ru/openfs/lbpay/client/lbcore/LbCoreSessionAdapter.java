@@ -29,7 +29,7 @@ import api3.SoapPrePayment;
 import io.quarkus.logging.Log;
 
 /**
- * session wrapper and lbcore message adapter
+ * lbcore session wrapper and message adapter
  */
 public class LbCoreSessionAdapter implements AutoCloseable {
     public static final Long AGRM_NUM = 5L;
@@ -94,7 +94,7 @@ public class LbCoreSessionAdapter implements AutoCloseable {
     }
 
     /**
-     * create prePayement order
+     * create payment order
      * 
      * @param  agreementId
      * @param  amount

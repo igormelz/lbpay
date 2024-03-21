@@ -21,6 +21,7 @@ import java.util.Set;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.NotFoundException;
 
 import org.apache.camel.ProducerTemplate;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -37,7 +38,7 @@ import jakarta.annotation.PostConstruct;
 
 @Singleton
 public class LbCoreSoapClient {
-    
+
     private WebClient client;
 
     @ConfigProperty(name = "lbcore.host", defaultValue = "127.0.0.1")
@@ -65,7 +66,11 @@ public class LbCoreSoapClient {
     }
 
     protected <T> T getMandatoryResponse(Object request, String sessionId, Class<T> clazz) {
-        return callService(request, sessionId).getJsonObject("data").mapTo(clazz);
+        var response = callService(request, sessionId);
+        if (response.containsKey("data")) {
+            return response.getJsonObject("data").mapTo(clazz);
+        }
+        throw new NotFoundException("not found data key in response");
     }
 
     protected JsonObject callService(Object request, String sessionId) throws RuntimeException {
@@ -80,7 +85,7 @@ public class LbCoreSoapClient {
                     json.put("data", JsonObject
                             .mapFrom(producer.requestBody("direct:unmarshalSoap", response.bodyAsBuffer().getBytes())));
                     return json;
-                }).await().indefinitely(); 
+                }).await().indefinitely();
     }
 
     ErrorConverter converter = ErrorConverter.createFullBody(result -> {

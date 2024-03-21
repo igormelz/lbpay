@@ -41,13 +41,13 @@ public class SberOnlineService {
     @Inject
     EventBus eventBus;
 
-    public SberOnlineMessage processRequest(SberOnlineRequest request) {
-        if (request.isCheckOperation() == Boolean.TRUE)
-            return processCheckAccount(request.account());
-        return processPayment(request);
-    }
-
-    private SberOnlineMessage processCheckAccount(String account) {
+    /**
+     * process SberOnline check account
+     * 
+     * @param  account
+     * @return
+     */
+    public SberOnlineMessage processCheckAccount(String account) {
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             var acctInfo = adapter.findAccountInfo(account)
@@ -69,7 +69,13 @@ public class SberOnlineService {
         }
     }
 
-    private SberOnlineMessage processPayment(SberOnlineRequest request) {
+    /**
+     * process SberOnline payment
+     * 
+     * @param  request
+     * @return
+     */
+    public SberOnlineMessage processPayment(SberOnlineRequest request) {
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             // validate account

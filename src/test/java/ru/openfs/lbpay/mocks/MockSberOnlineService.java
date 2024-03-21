@@ -12,11 +12,14 @@ import ru.openfs.lbpay.service.SberOnlineService;
 public class MockSberOnlineService extends SberOnlineService {
 
     @Override
-    public SberOnlineMessage processRequest(SberOnlineRequest request) {
-        if (request.isCheckOperation())
-            return new SberOnlineMessage.Builder().responseType(SberOnlineResponseType.OK)
-                    .setBalance(1.0).setRecSum(10.0)
-                    .setAddress("SPB").build();
+    public SberOnlineMessage processCheckAccount(String account) {
+        return new SberOnlineMessage.Builder().responseType(SberOnlineResponseType.OK)
+                .setBalance(1.0).setRecSum(10.0)
+                .setAddress("SPB").build();
+    }
+
+    @Override
+    public SberOnlineMessage processPayment(SberOnlineRequest request) {
         return new SberOnlineMessage.Builder()
                 .responseType(SberOnlineResponseType.OK)
                 .setExtId(101010L)

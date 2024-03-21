@@ -45,7 +45,8 @@ public class SberOnlineResource {
     @ServerExceptionMapper
     public RestResponse<String> mapException(SberOnlineException x) {
         Log.error(x.getMessage());
-        return RestResponse.ok(producer.requestBody(new SberOnlineMessage.Builder().responseType(x.getResponse()).build(), String.class));
+        return RestResponse
+                .ok(producer.requestBody(new SberOnlineMessage.Builder().responseType(x.getResponse()).build(), String.class));
     }
 
     @GET
@@ -57,11 +58,11 @@ public class SberOnlineResource {
             @QueryParam("PAY_ID") String payId,
             @QueryParam("PAY_DATE") String payDate) {
 
-        return producer
-                .requestBody(sberOnlineService
-                        .processRequest(SberOnlineValidator
-                                .validateRequest(action, account, amount, payId, payDate)),
-                        String.class);
+        var request = SberOnlineValidator.validateRequest(action, account, amount, payId, payDate);
+        var response = request.isCheckOperation()
+                ? sberOnlineService.processCheckAccount(account)
+                : sberOnlineService.processPayment(request);
+        return producer.requestBody(response, String.class);
     }
 
 }
