@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.model;
+package ru.openfs.lbpay.model.dao;
 
 import java.util.List;
 
@@ -22,6 +22,7 @@ import io.vertx.mutiny.mysqlclient.MySQLPool;
 import io.vertx.mutiny.sqlclient.Row;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import ru.openfs.lbpay.model.PrePayment;
 
 @ApplicationScoped
 public class PrePaymentsDao {

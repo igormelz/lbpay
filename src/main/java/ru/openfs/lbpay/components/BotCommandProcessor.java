@@ -42,10 +42,9 @@ import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
 import ru.openfs.lbpay.client.dreamkas.model.type.OperationStatus;
-import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
-import ru.openfs.lbpay.model.PrePaymentsDao;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
+import ru.openfs.lbpay.model.dao.PrePaymentsDao;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @Singleton
