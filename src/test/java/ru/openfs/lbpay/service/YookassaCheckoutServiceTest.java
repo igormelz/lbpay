@@ -11,10 +11,11 @@ import org.junit.jupiter.api.Test;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import ru.openfs.lbpay.client.YookassaClient;
-import ru.openfs.lbpay.dto.yookassa.Confirmation;
-import ru.openfs.lbpay.dto.yookassa.Payment;
+import ru.openfs.lbpay.client.yookassa.YookassaClient;
 import ru.openfs.lbpay.exception.CheckoutException;
+import ru.openfs.lbpay.model.yookassa.Confirmation;
+import ru.openfs.lbpay.model.yookassa.Payment;
+import ru.openfs.lbpay.service.impl.YookassaCheckoutService;
 
 @QuarkusTest
 class YookassaCheckoutServiceTest {

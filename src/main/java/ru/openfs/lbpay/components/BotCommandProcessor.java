@@ -1,3 +1,18 @@
+/*
+ * Copyright 2021-2024 OpenFS.RU
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package ru.openfs.lbpay.components;
 
 import java.util.Arrays;
@@ -26,10 +41,10 @@ import io.quarkus.panache.common.Sort;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
-import ru.openfs.lbpay.dto.dreamkas.type.OperationStatus;
-import ru.openfs.lbpay.mapper.ReceiptOrderBuilder;
-import ru.openfs.lbpay.model.PrePaymentsDao;
-import ru.openfs.lbpay.model.Templates;
+import ru.openfs.lbpay.model.ReceiptCustomer;
+import ru.openfs.lbpay.model.ReceiptOrder;
+import ru.openfs.lbpay.model.dao.PrePaymentsDao;
+import ru.openfs.lbpay.model.dreamkas.type.OperationStatus;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
 
 @Singleton
@@ -86,12 +101,12 @@ public class BotCommandProcessor implements Processor {
     private void processCallback(IncomingCallbackQuery callbackQuery) {
         Log.infof("Process callback [%s]", callbackQuery.getData());
 
-        var queryType = callbackQuery.getData().split(":")[0];
         var queryParams = Arrays.asList(callbackQuery.getData().split(":"));
+        var queryType = queryParams.get(0);
         var messageId = callbackQuery.getMessage().getMessageId().intValue();
         var chatId = callbackQuery.getMessage().getChat().getId();
 
-        // replay confirm to command
+        // confirm to command
         OutgoingCallbackQueryMessage msg = new OutgoingCallbackQueryMessage();
         msg.setCallbackQueryId(callbackQuery.getId());
         msg.setText(queryType);
@@ -99,29 +114,15 @@ public class BotCommandProcessor implements Processor {
 
         // process command
         switch (queryType) {
-            case QUERY_PAYMENT_STATUS:
-                callbackPaymentStatus(queryParams.get(1), messageId);
-                break;
-            case QUERY_CANCEL_ORDER:
-                doCancelOrder(queryParams.get(1), messageId);
-                break;
-            case QUERY_RECEIPT_STATUS:
-                getOperationStatus(queryParams.get(1), messageId);
-                break;
-            case QUERY_REGISTER_RECEIPT:
-                doRegisterReceipt(queryParams.get(1), messageId);
-                break;
-            case QUERY_CANCEL_RECEIPT:
-                doCancelRegister(queryParams.get(1), messageId);
-                break;
-            case QUERY_PROCESS_PAYMENT:
-                doProcessPayment(queryParams.get(1), queryParams.get(2), messageId);
-                break;
-            case QUERY_CLEAR_MSG:
-                producer.sendBody(new EditMessageDelete(chatId, messageId));
-                break;
-            default:
-                Log.warnf("Unknown callback: %s", callbackQuery.getData());
+            case QUERY_PAYMENT_STATUS -> callbackPaymentStatus(queryParams.get(1), messageId);
+            case QUERY_CANCEL_ORDER -> doCancelOrder(queryParams.get(1), messageId);
+            case QUERY_RECEIPT_STATUS -> getOperationStatus(queryParams.get(1), messageId);
+            case QUERY_REGISTER_RECEIPT -> doRegisterReceipt(queryParams.get(1), messageId);
+            case QUERY_CANCEL_RECEIPT -> doCancelRegister(queryParams.get(1), messageId);
+            case QUERY_PROCESS_PAYMENT -> doProcessPayment(queryParams.get(1), queryParams.get(2), messageId);
+            case QUERY_CLEAR_MSG -> producer.sendBody(new EditMessageDelete(chatId, messageId));
+
+            default -> Log.warnf("Unknown callback: %s", callbackQuery.getData());
         }
     }
 
@@ -132,6 +133,7 @@ public class BotCommandProcessor implements Processor {
             case CMD_START -> producer.sendBody("Starting LBPAY Notify Bot");
             case CMD_PENDING_ORDERS -> getPendingOrders();
             case CMD_WAITING_RECEIPTS -> getWaitingReceipts();
+            
             default -> Log.warnf("Unknown command: %s", command);
         }
     }
@@ -152,12 +154,12 @@ public class BotCommandProcessor implements Processor {
     @Transactional
     public void doRegisterReceipt(String orderNumber, int messageId) {
         DreamkasOperation.findByOrderNumber(orderNumber).ifPresent(receipOperation -> {
-            if (receipOperation.operationId == null) {
-                Log.infof("Re-Processing not registered orderNumber: %s", orderNumber);
-                eventBus.send("register-receipt", ReceiptOrderBuilder.createReceiptOrderFromOperation(receipOperation));
-            } else if (receipOperation.operationStatus == OperationStatus.ERROR) {
-                Log.infof("Re-Processing error orderNumber: %s", orderNumber);
-                eventBus.send("register-receipt", ReceiptOrderBuilder.createReceiptOrderFromOperation(receipOperation));
+            if (receipOperation.operationId == null || receipOperation.operationStatus == OperationStatus.ERROR) {
+                Log.infof("Re-Processing orderNumber: %s", orderNumber);
+                eventBus.send("register-receipt",
+                        new ReceiptOrder(
+                                receipOperation.amount, receipOperation.orderNumber, receipOperation.account,
+                                receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone)));
             }
         });
     }

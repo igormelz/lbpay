@@ -1,5 +1,5 @@
 /*
- * Copyright 2021,2022 OpenFS.RU
+ * Copyright 2021-2024 OpenFS.RU
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,4 @@ package ru.openfs.lbpay.model;
 
 import java.time.LocalDateTime;
 
-import io.quarkus.runtime.annotations.RegisterForReflection;
-
-@RegisterForReflection
-public record PrePayment(Integer orderNumber,
-                         LocalDateTime payDate,
-                         String comments,
-                         Integer diff) {}
+public record PrePayment(Integer orderNumber, LocalDateTime payDate, String comments, Integer diff) {}
