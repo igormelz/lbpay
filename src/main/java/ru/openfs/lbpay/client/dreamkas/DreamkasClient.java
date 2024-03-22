@@ -22,8 +22,8 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
-import ru.openfs.lbpay.client.dreamkas.model.Operation;
-import ru.openfs.lbpay.client.dreamkas.model.Receipt;
+import ru.openfs.lbpay.model.dreamkas.Operation;
+import ru.openfs.lbpay.model.dreamkas.Receipt;
 
 @RegisterRestClient(configKey = "Dreamkas")
 public interface DreamkasClient {

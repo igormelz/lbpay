@@ -13,9 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service;
+package ru.openfs.lbpay.model.dreamkas.type;
 
-public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
+public enum VatType {
+    NDS_NO_TAX,
+    NDS_0,
+    NDS_10,
+    NDS_20,
+    NDS_10_CALCULATED,
+    NDS_20_CALCULATED
 }

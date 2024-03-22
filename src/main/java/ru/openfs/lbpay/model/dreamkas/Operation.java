@@ -13,9 +13,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service;
+package ru.openfs.lbpay.model.dreamkas;
 
-public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+
+import ru.openfs.lbpay.model.dreamkas.type.OperationStatus;
+
+@JsonInclude(Include.NON_NULL)
+public record Operation(
+    String id,
+    String externalId,
+    String createdAt,
+    OperationStatus status,
+    OperationData data,
+    String type,
+    String completedAt
+) {
+    
 }

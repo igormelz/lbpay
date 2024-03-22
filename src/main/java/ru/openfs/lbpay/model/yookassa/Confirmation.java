@@ -13,9 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service;
+package ru.openfs.lbpay.model.yookassa;
 
-public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
-}
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
+
+@JsonInclude(Include.NON_NULL)
+public record Confirmation(
+    String type,
+    @JsonProperty("return_url") String returnUrl,
+    @JsonProperty("confirmation_url") String confirmationUrl
+) {}

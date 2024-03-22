@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service;
+package ru.openfs.lbpay.model.yookassa;
 
-public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
-}
+public record Amount(
+    String value,
+    String currency
+) {}

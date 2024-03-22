@@ -24,12 +24,12 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.yookassa.YookassaClient;
-import ru.openfs.lbpay.client.yookassa.model.Amount;
-import ru.openfs.lbpay.client.yookassa.model.Confirmation;
-import ru.openfs.lbpay.client.yookassa.model.MetaData;
-import ru.openfs.lbpay.client.yookassa.model.PaymentMethod;
-import ru.openfs.lbpay.client.yookassa.model.PaymentRequest;
-import ru.openfs.lbpay.resource.checkout.exception.CheckoutException;
+import ru.openfs.lbpay.exception.CheckoutException;
+import ru.openfs.lbpay.model.yookassa.Amount;
+import ru.openfs.lbpay.model.yookassa.Confirmation;
+import ru.openfs.lbpay.model.yookassa.MetaData;
+import ru.openfs.lbpay.model.yookassa.PaymentMethod;
+import ru.openfs.lbpay.model.yookassa.PaymentRequest;
 
 @ApplicationScoped
 public class YookassaCheckoutService extends AbstractCheckoutService {

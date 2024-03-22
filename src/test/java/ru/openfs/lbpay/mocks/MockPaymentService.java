@@ -6,7 +6,7 @@ import ru.openfs.lbpay.service.PaymentService;
 
 @Mock
 @ApplicationScoped
-public class MockPaymentService extends PaymentService {
+public class MockPaymentService implements PaymentService {
 
     @Override
     public void processPayment(Long orderNumber, String mdOrder) {}

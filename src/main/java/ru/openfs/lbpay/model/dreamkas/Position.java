@@ -13,9 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service;
+package ru.openfs.lbpay.model.dreamkas;
 
-public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
-}
+import ru.openfs.lbpay.model.dreamkas.type.PositionType;
+import ru.openfs.lbpay.model.dreamkas.type.VatType;
+
+public record Position(String name, PositionType type, Integer quantity, Integer price, Integer priceSum, VatType tax,
+                       Integer taxSum) {}

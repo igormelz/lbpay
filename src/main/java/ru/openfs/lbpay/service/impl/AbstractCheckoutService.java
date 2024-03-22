@@ -18,7 +18,7 @@ package ru.openfs.lbpay.service.impl;
 import io.quarkus.logging.Log;
 import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
-import ru.openfs.lbpay.resource.checkout.exception.CheckoutException;
+import ru.openfs.lbpay.exception.CheckoutException;
 import ru.openfs.lbpay.service.CheckoutService;
 
 public abstract class AbstractCheckoutService implements CheckoutService {

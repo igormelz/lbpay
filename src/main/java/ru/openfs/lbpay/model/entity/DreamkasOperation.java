@@ -22,7 +22,7 @@ import io.quarkus.hibernate.orm.panache.PanacheEntity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import ru.openfs.lbpay.client.dreamkas.model.type.OperationStatus;
+import ru.openfs.lbpay.model.dreamkas.type.OperationStatus;
 
 @Entity
 public class DreamkasOperation extends PanacheEntity {

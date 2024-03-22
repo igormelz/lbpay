@@ -15,7 +15,7 @@
  */
 package ru.openfs.lbpay.service;
 
-import static ru.openfs.lbpay.resource.sberonline.model.SberOnlineResponseType.*;
+import static ru.openfs.lbpay.model.sberonline.SberOnlineResponseType.*;
 
 import java.util.UUID;
 
@@ -26,11 +26,10 @@ import io.vertx.mutiny.core.eventbus.EventBus;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
+import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
-import ru.openfs.lbpay.resource.sberonline.exception.SberOnlineException;
-import ru.openfs.lbpay.resource.sberonline.model.SberOnlineMessage;
-import ru.openfs.lbpay.resource.sberonline.model.SberOnlineRequest;
+import ru.openfs.lbpay.model.sberonline.SberOnlineResponse;
 
 @ApplicationScoped
 public class SberOnlineService {
@@ -47,7 +46,7 @@ public class SberOnlineService {
      * @param  account
      * @return
      */
-    public SberOnlineMessage processCheckAccount(String account) {
+    public SberOnlineResponse processCheckAccount(String account) {
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             var acctInfo = adapter.findAccountInfo(account)
@@ -70,50 +69,52 @@ public class SberOnlineService {
     }
 
     /**
-     * process SberOnline payment
-     * 
-     * @param  request
+     * process sber online payment
+     *  
+     * @param account
+     * @param payId
+     * @param amount
+     * @param payDate
      * @return
      */
-    public SberOnlineMessage processPayment(SberOnlineRequest request) {
+    public SberOnlineResponse processPayment(String account, String payId, Double amount, String payDate) {
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             // validate account
-            var acctInfo = adapter.findAccountInfo(request.account())
+            var acctInfo = adapter.findAccountInfo(account)
                     .orElseThrow(() -> new SberOnlineException(
-                            ACCOUNT_NOT_FOUND, String.format("paid account:[%s] not found", request.account())));
+                            ACCOUNT_NOT_FOUND, String.format("paid account:[%s] not found", account)));
 
-            var existPayment = adapter.findPayment(request.payId());
+            var existPayment = adapter.findPayment(payId);
             if (existPayment.isPresent()) {
-                Log.warnf("duplicate payment: [%s]", request.payId());
+                Log.warnf("duplicate payment: [%s]", payId);
                 return responseDuplicate(existPayment.get());
             }
 
             // do payment
-            var paymentId = adapter.sberOnlinePayment(
-                    request.payId(), request.account(), request.amount(), request.payDate());
+            var paymentId = adapter.sberOnlinePayment(payId, account, amount, payDate);
 
             // get payment info
-            var payment = adapter.findPayment(request.payId())
+            var payment = adapter.findPayment(payId)
                     .orElseThrow(() -> new SberOnlineException(TMP_ERR, "payment not processed"));
 
             // invoke receipt 
-            createReceiptOrder(request.amount(), request.payId(), request.account(), acctInfo);
+            registerReceipt(amount, payId, account, acctInfo);
 
             Log.infof("Processed payment orderNumber:[%s], account: %s, amount:%.2f",
-                    request.payId(), request.account(), request.amount());
+                    payId, account, amount);
 
-            return responsePayment(paymentId, request.amount(), payment.getPay().getLocaldate());
+            return responsePayment(paymentId, amount, payment.getPay().getLocaldate());
 
         } catch (Exception e) {
             eventBus.send("notify-error",
-                    String.format("payment orderNumber: %s - %s", request.payId(), e.getMessage()));
+                    String.format("payment orderNumber: %s - %s", payId, e.getMessage()));
             throw new SberOnlineException(TMP_ERR, e.getMessage());
         }
     }
 
-    private SberOnlineMessage responseCheck(double balance, double recSum, SoapAccountFull acctInfo) {
-        return new SberOnlineMessage.Builder()
+    private SberOnlineResponse responseCheck(double balance, double recSum, SoapAccountFull acctInfo) {
+        return new SberOnlineResponse.Builder()
                 .responseType(OK)
                 .setBalance(balance)
                 .setRecSum(recSum)
@@ -121,8 +122,8 @@ public class SberOnlineService {
                 .build();
     }
 
-    private SberOnlineMessage responseDuplicate(SoapPaymentFull existingPayment) {
-        return new SberOnlineMessage.Builder()
+    private SberOnlineResponse responseDuplicate(SoapPaymentFull existingPayment) {
+        return new SberOnlineResponse.Builder()
                 .responseType(PAY_TRX_DUPLICATE)
                 .setExtId(existingPayment.getPay().getRecordid())
                 .setRegDate(existingPayment.getPay().getLocaldate())
@@ -130,8 +131,8 @@ public class SberOnlineService {
                 .build();
     }
 
-    private SberOnlineMessage responsePayment(long paymentId, double amount, String regDate) {
-        return new SberOnlineMessage.Builder()
+    private SberOnlineResponse responsePayment(long paymentId, double amount, String regDate) {
+        return new SberOnlineResponse.Builder()
                 .responseType(OK)
                 .setExtId(paymentId)
                 .setSum(amount)
@@ -139,7 +140,7 @@ public class SberOnlineService {
                 .build();
     }
 
-    private void createReceiptOrder(double amount, String orderNumber, String account, SoapAccountFull acctInfo) {
+    private void registerReceipt(double amount, String orderNumber, String account, SoapAccountFull acctInfo) {
         eventBus.send("register-receipt", new ReceiptOrder(
                 amount, orderNumber, account, UUID.randomUUID().toString(),
                 new ReceiptCustomer(

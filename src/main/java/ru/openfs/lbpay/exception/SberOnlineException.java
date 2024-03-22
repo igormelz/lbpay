@@ -13,9 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package ru.openfs.lbpay.service;
+package ru.openfs.lbpay.exception;
 
-public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
+import ru.openfs.lbpay.model.sberonline.SberOnlineResponseType;
+
+public class SberOnlineException extends RuntimeException {
+    private final SberOnlineResponseType response;
+
+    public SberOnlineException(SberOnlineResponseType response, String message) {
+        super(message);
+        this.response = response;
+    }
+
+    public SberOnlineResponseType getResponse() {
+        return this.response;
+    }
 }
