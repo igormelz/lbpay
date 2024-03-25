@@ -32,6 +32,7 @@ import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
 import io.quarkus.logging.Log;
+import io.smallrye.common.annotation.RunOnVirtualThread;
 import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.model.sberonline.SberOnlineResponse;
 import ru.openfs.lbpay.model.sberonline.SberOnlineResponseType;
@@ -59,6 +60,7 @@ public class SberOnlineResource {
 
     @GET
     @Produces(MediaType.APPLICATION_XML)
+    @RunOnVirtualThread
     public String process(
             @QueryParam("ACTION") String action,
             @QueryParam("ACCOUNT") String account,

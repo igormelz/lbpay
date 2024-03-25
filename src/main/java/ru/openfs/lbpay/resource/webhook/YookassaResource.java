@@ -16,6 +16,7 @@
 package ru.openfs.lbpay.resource.webhook;
 
 import io.quarkus.logging.Log;
+import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
@@ -33,6 +34,7 @@ public class YookassaResource {
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
+    @RunOnVirtualThread
     public Response callback(Webhook webhook) {
         Log.debug(webhook);
         if (webhook.event().equalsIgnoreCase("payment.succeeded")) {
