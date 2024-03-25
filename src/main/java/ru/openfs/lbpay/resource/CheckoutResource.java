@@ -22,6 +22,7 @@ import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 
 import io.quarkus.logging.Log;
+import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
@@ -54,6 +55,7 @@ public class CheckoutResource {
     }
 
     @GET
+    @RunOnVirtualThread
     public RestResponse<Void> checkAccount(@QueryParam("uid") String account) {
         if (account != null && account.matches(accountPattern) && checkoutService.isActiveAccount(account))
             return RestResponse.noContent();
@@ -61,6 +63,7 @@ public class CheckoutResource {
     }
 
     @POST
+    @RunOnVirtualThread
     public RestResponse<Void> checkout(@FormParam("uid") String account, @FormParam("amount") double amount) {
         if (account != null && account.matches(accountPattern) && amount >= amountMin && amount <= amountMax) {
             return RestResponse.seeOther(URI.create(checkoutService.processCheckout(account, amount)));

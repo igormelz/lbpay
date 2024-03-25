@@ -22,6 +22,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.MediaType;
 
 import io.quarkus.logging.Log;
+import io.smallrye.common.annotation.RunOnVirtualThread;
 import io.vertx.core.json.JsonObject;
 import ru.openfs.lbpay.model.dreamkas.Operation;
 import ru.openfs.lbpay.service.ReceiptOperation;
@@ -34,6 +35,7 @@ public class DreamkasResource {
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
+    @RunOnVirtualThread
     public void callback(JsonObject webhook) {
         Log.debug("start processing webhook:" + webhook);
 
