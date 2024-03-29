@@ -40,7 +40,7 @@ public class YookassaResource {
         if (webhook.event().equalsIgnoreCase("payment.succeeded")) {
             paymentService.processPayment(Long.parseLong(webhook.object().metadata().paymentId()), webhook.object().id());
         } else if (webhook.event().equalsIgnoreCase("payment.canceled")) {
-            paymentService.processDecline(Long.parseLong(webhook.object().metadata().paymentId()));
+            paymentService.processDecline(Long.parseLong(webhook.object().metadata().paymentId()), webhook.object().id());
         } else {
             Log.warn("unprocessed event:" + webhook.event());
         }

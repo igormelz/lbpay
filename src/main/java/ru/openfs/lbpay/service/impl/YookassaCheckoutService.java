@@ -47,14 +47,12 @@ public class YookassaCheckoutService extends AbstractCheckoutService {
                 orderNumber, account, amount);
         try {
             var response = yookassaClient.payments(createRequest(orderNumber, account, amount, successUrl));
+            var confirmationUrl = Optional.ofNullable(response.confirmation()).map(c -> c.confirmationUrl())
+                    .orElseThrow(() -> new CheckoutException("no confiramtion url"));
 
-            return Optional.ofNullable(response.confirmation())
-                    .map(c -> {
-                        Log.infof("yookassa checkout for %d: account: %s, amount: %.2f, mdOrder: %s",
-                                orderNumber, account, amount, response.id());
-                        return c.confirmationUrl();
-                    }).orElseThrow(() -> new CheckoutException("no confiramtion url"));
-
+            Log.infof("Checkout orderNumber:[%d], account:[%s], amount:[%.2f], id:[%s]",
+                    orderNumber, account, amount, response.id());
+            return confirmationUrl;
         } catch (RuntimeException e) {
             throw new CheckoutException(e.getMessage());
         }
@@ -67,7 +65,6 @@ public class YookassaCheckoutService extends AbstractCheckoutService {
                 new PaymentMethod("bank_card", null, null),
                 new Confirmation("redirect", url, null),
                 String.format("Оплата заказа №%d по договору %s", orderNumber, account),
-                new MetaData(Long.toString(orderNumber))
-        );
+                new MetaData(Long.toString(orderNumber)));
     }
 }

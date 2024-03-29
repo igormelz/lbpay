@@ -15,7 +15,6 @@
  */
 package ru.openfs.lbpay.service.impl;
 
-import io.quarkus.logging.Log;
 import jakarta.inject.Inject;
 import ru.openfs.lbpay.client.lbcore.LbCoreSoapClient;
 import ru.openfs.lbpay.exception.CheckoutException;
@@ -48,7 +47,6 @@ public abstract class AbstractCheckoutService implements CheckoutService {
      * @return         url string to payment page
      */
     public String processCheckout(String account, Double amount) {
-        Log.infof("checkout account: %s, amount: %.2f", account, amount);
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             // get active agreement id
