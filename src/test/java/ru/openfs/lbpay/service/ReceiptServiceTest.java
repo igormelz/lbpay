@@ -51,14 +51,15 @@ class ReceiptServiceTest {
 
     @Test
     void testCreateReceiptWithDefaultValues() {
-        var rcpt = new Receipt("mdOrder", 1, 123, null, null);
+        var rcpt = new Receipt("mdOrder", 1, 123, null, null, "Test");
         assertEquals("mdOrder", rcpt.externalId());
         assertEquals(OperationType.SALE, rcpt.type());
         assertEquals(TaxMode.SIMPLE_WO, rcpt.taxMode());
-        assertEquals(PositionType.SERVICE, rcpt.positions().get(0).type());
-        assertEquals(VatType.NDS_NO_TAX, rcpt.positions().get(0).tax());
-        assertEquals(PaymentType.CASHLESS, rcpt.payments().get(0).type());
-        assertEquals(123, rcpt.payments().get(0).sum());
+        assertEquals(PositionType.SERVICE, rcpt.positions().getFirst().type());
+        assertEquals("Test", rcpt.positions().getFirst().name());
+        assertEquals(VatType.NDS_NO_TAX, rcpt.positions().getFirst().tax());
+        assertEquals(PaymentType.CASHLESS, rcpt.payments().getFirst().type());
+        assertEquals(123, rcpt.payments().getFirst().sum());
         assertEquals(123, rcpt.total().priceSum());
     }
 

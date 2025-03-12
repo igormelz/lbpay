@@ -46,6 +46,9 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
     @ConfigProperty(name = "dreamkas.deviceId", defaultValue = "123456")
     Integer deviceId;
 
+    @ConfigProperty(name = "dreamkas.receipt.product.name", defaultValue = "Пополнение счета")
+    String productName;
+
     @Inject
     EventBus eventBus;
 
@@ -98,7 +101,7 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
         // calc service price to coins
         var price = (int) (receiptOrder.amount() * 100);
 
-        return new Receipt(receiptOrder.mdOrder(), deviceId, price, receiptOrder.info().email(), receiptOrder.info().phone());
+        return new Receipt(receiptOrder.mdOrder(), deviceId, price, receiptOrder.info().email(), receiptOrder.info().phone(), productName);
     }
 
     /**

@@ -26,14 +26,14 @@ import ru.openfs.lbpay.model.dreamkas.type.VatType;
 public record Receipt(String externalId, Integer deviceId, OperationType type, Integer timeout, TaxMode taxMode,
                       List<Position> positions, List<Payment> payments, Attributes attributes, Total total) {
     // default 
-    public Receipt(String externalId, Integer deviceId, Integer price, String email, String phone) {
+    public Receipt(String externalId, Integer deviceId, Integer price, String email, String phone, String productName) {
         this(
              externalId,
              deviceId,
              OperationType.SALE,
              15,
              TaxMode.SIMPLE_WO,
-             List.of(new Position("Оплата услуг", PositionType.SERVICE, 1, price, price, VatType.NDS_NO_TAX, 0)),
+             List.of(new Position(productName, PositionType.SERVICE, 1, price, price, VatType.NDS_NO_TAX, 0)),
              List.of(new Payment(price, PaymentType.CASHLESS)),
              new Attributes(email, phone),
              new Total(price));
