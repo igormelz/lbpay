@@ -17,5 +17,5 @@ package ru.openfs.lbpay.service;
 
 public interface PaymentService {
     void processPayment(Long orderNumber, String mdOrder);
-    void processDecline(long orderNumber);
+    void processDecline(long orderNumber, String mdOrder);
 }

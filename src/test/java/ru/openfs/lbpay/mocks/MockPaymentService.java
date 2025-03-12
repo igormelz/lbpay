@@ -12,5 +12,6 @@ public class MockPaymentService implements PaymentService {
     public void processPayment(Long orderNumber, String mdOrder) {}
 
     @Override
-    public void processDecline(long orderNumber) {}
+    public void processDecline(long orderNumber, String mdOrder) {}
+
 }

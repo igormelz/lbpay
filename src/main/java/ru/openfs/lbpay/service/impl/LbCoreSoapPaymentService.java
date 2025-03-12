@@ -50,7 +50,7 @@ public class LbCoreSoapPaymentService implements PaymentService {
 
             // test duplicate 
             if (order.getStatus() != 0) {
-                Log.warnf("orderNumber:[" + orderNumber + "] was paid at " + order.getPaydate());
+                Log.warnf("was paid [%s], orderNumber:[%d], id:[%s]", order.getPaydate(), orderNumber, mdOrder);
                 return;
             }
 
@@ -58,15 +58,16 @@ public class LbCoreSoapPaymentService implements PaymentService {
             adapter.confirmPrePayment(orderNumber, order.getAmount(), mdOrder);
 
             var acct = adapter.findAccountByAgreementId(order.getAgrmid()).orElseThrow();
-            var agrm = acct.getAgreements().stream().filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst()
-                    .orElseThrow();
-            Log.infof("Process payment orderNumber:[%d], account:[%s], amount:[%.2f]",
-                    orderNumber, agrm.getNumber(), order.getAmount());
+            var agrm = acct.getAgreements().stream()
+                    .filter(a -> a.getAgrmid() == order.getAgrmid()).findFirst().orElseThrow();
+
+            Log.infof("Payment orderNumber:[%d], account:[%s], amount:[%.2f], id:[%s]",
+                    orderNumber, agrm.getNumber(), order.getAmount(), mdOrder);
 
             createReceiptOrder(order.getAmount(), String.valueOf(orderNumber), agrm.getNumber(), mdOrder, acct);
 
         } catch (Exception e) {
-            eventBus.send("notify-error", String.format("orderNumber:[%d] deposited: %s", orderNumber, e.getMessage()));
+            eventBus.send("notify-error", String.format("orderNumber:[%d] - %s", orderNumber, e.getMessage()));
             throw new PaymentException(e.getMessage());
         }
     }
@@ -76,7 +77,7 @@ public class LbCoreSoapPaymentService implements PaymentService {
      * 
      * @param orderNumber the orderNumber to decline
      */
-    public void processDecline(long orderNumber) {
+    public void processDecline(long orderNumber, String mdOrder) {
         Log.debugf("start decline orderNumber: [%d]", orderNumber);
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
@@ -84,13 +85,13 @@ public class LbCoreSoapPaymentService implements PaymentService {
                     .orElseThrow(() -> new PaymentException("not found orderNumber:[" + orderNumber + "]"));
 
             if (order.getStatus() != 0) {
-                Log.warnf("orderNumber:[" + orderNumber + "] was declined at " + order.getPaydate());
+                Log.warnf("was declined [%s], orderNumber:[%d], id:[%s]", order.getPaydate(), orderNumber, mdOrder);
                 return;
             }
 
             // do cancel
             adapter.cancelPrePayment(orderNumber);
-            Log.infof("declined orderNumber:[%d]", orderNumber);
+            Log.infof("Declined orderNumber:[%d], id:[%s]", orderNumber, mdOrder);
 
         } catch (Exception e) {
             eventBus.send("notify-error",
@@ -107,4 +108,5 @@ public class LbCoreSoapPaymentService implements PaymentService {
                         acctInfo.getAccount().getEmail(),
                         acctInfo.getAccount().getMobile())));
     }
+
 }

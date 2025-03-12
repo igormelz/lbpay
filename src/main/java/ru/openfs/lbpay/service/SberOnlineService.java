@@ -70,11 +70,11 @@ public class SberOnlineService {
 
     /**
      * process sber online payment
-     *  
-     * @param account
-     * @param payId
-     * @param amount
-     * @param payDate
+     * 
+     * @param  account
+     * @param  payId
+     * @param  amount
+     * @param  payDate
      * @return
      */
     public SberOnlineResponse processPayment(String account, String payId, Double amount, String payDate) {
@@ -87,7 +87,7 @@ public class SberOnlineService {
 
             var existPayment = adapter.findPayment(payId);
             if (existPayment.isPresent()) {
-                Log.warnf("duplicate payment: [%s]", payId);
+                Log.warnf("duplicate payment id:[%s]", payId);
                 return responseDuplicate(existPayment.get());
             }
 
@@ -101,14 +101,13 @@ public class SberOnlineService {
             // invoke receipt 
             registerReceipt(amount, payId, account, acctInfo);
 
-            Log.infof("Processed payment orderNumber:[%s], account: %s, amount:%.2f",
-                    payId, account, amount);
+            Log.infof("Payment account:[%s], amount:[%.2f], id:[%s]", account, amount, payId);
 
             return responsePayment(paymentId, amount, payment.getPay().getLocaldate());
 
         } catch (Exception e) {
             eventBus.send("notify-error",
-                    String.format("payment orderNumber: %s - %s", payId, e.getMessage()));
+                    String.format("payment id:%s - %s", payId, e.getMessage()));
             throw new SberOnlineException(TMP_ERR, e.getMessage());
         }
     }
