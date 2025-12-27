@@ -15,37 +15,30 @@
  */
 package ru.openfs.lbpay.components;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.Consumer;
-
-import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
-import jakarta.transaction.Transactional;
-
-import org.apache.camel.Exchange;
-import org.apache.camel.Processor;
-import org.apache.camel.Produce;
-import org.apache.camel.ProducerTemplate;
-import org.apache.camel.component.telegram.model.EditMessageDelete;
-import org.apache.camel.component.telegram.model.EditMessageTextMessage;
-import org.apache.camel.component.telegram.model.IncomingCallbackQuery;
-import org.apache.camel.component.telegram.model.IncomingMessage;
-import org.apache.camel.component.telegram.model.InlineKeyboardButton;
-import org.apache.camel.component.telegram.model.InlineKeyboardMarkup;
-import org.apache.camel.component.telegram.model.OutgoingCallbackQueryMessage;
-import org.apache.camel.component.telegram.model.OutgoingTextMessage;
-
 import io.quarkus.logging.Log;
 import io.quarkus.panache.common.Sort;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import jakarta.transaction.Transactional;
+import org.apache.camel.Exchange;
+import org.apache.camel.Processor;
+import org.apache.camel.Produce;
+import org.apache.camel.ProducerTemplate;
+import org.apache.camel.component.telegram.model.*;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.dao.PrePaymentsDao;
 import ru.openfs.lbpay.model.dreamkas.type.OperationStatus;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
+import ru.openfs.lbpay.utils.NdsCalculator;
+
+import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Consumer;
 
 @Singleton
 public class BotCommandProcessor implements Processor {
@@ -76,7 +69,7 @@ public class BotCommandProcessor implements Processor {
 
     /**
      * hanlde error message
-     * 
+     *
      * @param message
      */
     @ConsumeEvent(value = "notify-error", blocking = true)
@@ -133,7 +126,7 @@ public class BotCommandProcessor implements Processor {
             case CMD_START -> producer.sendBody("Starting LBPAY Notify Bot");
             case CMD_PENDING_ORDERS -> getPendingOrders();
             case CMD_WAITING_RECEIPTS -> getWaitingReceipts();
-            
+
             default -> Log.warnf("Unknown command: %s", command);
         }
     }
@@ -159,7 +152,9 @@ public class BotCommandProcessor implements Processor {
                 eventBus.send("register-receipt",
                         new ReceiptOrder(
                                 receipOperation.amount, receipOperation.orderNumber, receipOperation.account,
-                                receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone)));
+                                receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone),
+                                NdsCalculator.needNds(Instant.now())
+                        ));
             }
         });
     }
@@ -286,9 +281,9 @@ public class BotCommandProcessor implements Processor {
                                                 .builder()
                                                 .addRow(Arrays.asList(InlineKeyboardButton.builder().text("💳 payment")
                                                         .callbackData(QUERY_PROCESS_PAYMENT + ":" +
-                                                                      orderNumber + ":" +
-                                                                      json.getJsonArray("attributes").getJsonObject(0)
-                                                                              .getString("value"))
+                                                                orderNumber + ":" +
+                                                                json.getJsonArray("attributes").getJsonObject(0)
+                                                                        .getString("value"))
                                                         .build()))
                                                 .build())
                                 .build();

@@ -38,7 +38,7 @@ public class YookassaResource {
     public Response callback(Webhook webhook) {
         Log.debug(webhook);
         if (webhook.event().equalsIgnoreCase("payment.succeeded")) {
-            paymentService.processPayment(Long.parseLong(webhook.object().metadata().paymentId()), webhook.object().id());
+            paymentService.processPayment(Long.parseLong(webhook.object().metadata().paymentId()), webhook.object().id(), webhook.object().capturedAt());
         } else if (webhook.event().equalsIgnoreCase("payment.canceled")) {
             paymentService.processDecline(Long.parseLong(webhook.object().metadata().paymentId()), webhook.object().id());
         } else {

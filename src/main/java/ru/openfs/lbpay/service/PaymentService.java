@@ -15,7 +15,9 @@
  */
 package ru.openfs.lbpay.service;
 
+import java.time.Instant;
+
 public interface PaymentService {
-    void processPayment(Long orderNumber, String mdOrder);
+    void processPayment(Long orderNumber, String mdOrder, Instant capturedAt);
     void processDecline(long orderNumber, String mdOrder);
 }

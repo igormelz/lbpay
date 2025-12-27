@@ -18,5 +18,13 @@ package ru.openfs.lbpay.model.dreamkas;
 import ru.openfs.lbpay.model.dreamkas.type.PositionType;
 import ru.openfs.lbpay.model.dreamkas.type.VatType;
 
-public record Position(String name, PositionType type, Integer quantity, Integer price, Integer priceSum, VatType tax,
-                       Integer taxSum) {}
+public record Position(
+        String name,
+        PositionType type,
+        Integer quantity,
+        Integer price,
+        Integer priceSum,
+        VatType tax,
+        Integer taxSum
+) {
+}

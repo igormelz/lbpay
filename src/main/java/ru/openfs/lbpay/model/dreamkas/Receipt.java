@@ -15,27 +15,54 @@
  */
 package ru.openfs.lbpay.model.dreamkas;
 
+import ru.openfs.lbpay.model.dreamkas.type.*;
+import ru.openfs.lbpay.utils.NdsCalculator;
+
 import java.util.List;
 
-import ru.openfs.lbpay.model.dreamkas.type.OperationType;
-import ru.openfs.lbpay.model.dreamkas.type.PaymentType;
-import ru.openfs.lbpay.model.dreamkas.type.PositionType;
-import ru.openfs.lbpay.model.dreamkas.type.TaxMode;
-import ru.openfs.lbpay.model.dreamkas.type.VatType;
-
-public record Receipt(String externalId, Integer deviceId, OperationType type, Integer timeout, TaxMode taxMode,
-                      List<Position> positions, List<Payment> payments, Attributes attributes, Total total) {
-    // default 
-    public Receipt(String externalId, Integer deviceId, Integer price, String email, String phone, String productName) {
-        this(
-             externalId,
-             deviceId,
-             OperationType.SALE,
-             15,
-             TaxMode.SIMPLE_WO,
-             List.of(new Position(productName, PositionType.SERVICE, 1, price, price, VatType.NDS_NO_TAX, 0)),
-             List.of(new Payment(price, PaymentType.CASHLESS)),
-             new Attributes(email, phone),
-             new Total(price));
+public record Receipt(
+        String externalId,
+        Integer deviceId,
+        OperationType type,
+        Integer timeout,
+        TaxMode taxMode,
+        List<Position> positions,
+        List<Payment> payments,
+        Attributes attributes,
+        List<FiscalTag> tags,
+        Total total
+) {
+    // default
+    public Receipt(String externalId, Integer deviceId, Integer price, String email,
+                   String phone, String productName) {
+        this(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
+                List.of(new Position(productName, PositionType.SERVICE, 1, price, price, VatType.NDS_NO_TAX, 0)),
+                List.of(new Payment(price, PaymentType.CASHLESS)),
+                new Attributes(email, phone),
+                null,
+                new Total(price));
     }
+
+    // nds5 + tag 1125
+    public static Receipt createNds5(String externalId, Integer deviceId, Integer price, String email,
+                                     String phone, String productName) {
+        return new Receipt(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
+                List.of(new Position(productName, PositionType.SERVICE, 1, price, price,
+                        VatType.NDS_5, NdsCalculator.extractNDS5(price))),
+                List.of(new Payment(price, PaymentType.CASHLESS)),
+                new Attributes(email, phone), null, new Total(price));
+    }
+
+    // nds5 + tag 1125
+    public static Receipt createNds5WithTags(String externalId, Integer deviceId, Integer price, String email,
+                                             String phone, String productName) {
+        return new Receipt(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
+                List.of(new Position(productName, PositionType.SERVICE, 1, price, price,
+                        VatType.NDS_5, NdsCalculator.extractNDS5(price))),
+                List.of(new Payment(price, PaymentType.CASHLESS)),
+                new Attributes(email, phone),
+                List.of(new FiscalTag(1125, 1)),
+                new Total(price));
+    }
+
 }
