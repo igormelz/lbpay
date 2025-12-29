@@ -33,9 +33,7 @@ import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.dao.PrePaymentsDao;
 import ru.openfs.lbpay.model.dreamkas.type.OperationStatus;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
-import ru.openfs.lbpay.utils.NdsCalculator;
 
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
@@ -52,6 +50,7 @@ public class BotCommandProcessor implements Processor {
     private static final String QUERY_CLEAR_MSG = "clear_msg";
     private static final String QUERY_PROCESS_PAYMENT = "process_payment";
     private static final String QUERY_REGISTER_RECEIPT = "reg_receipt";
+    private static final String QUERY_REGISTER_RECEIPT_NDS = "reg_receipt_nds";
     private static final String QUERY_RECEIPT_STATUS = "receipt_status";
     private static final String QUERY_CANCEL_RECEIPT = "cancel_receipt";
 
@@ -110,7 +109,8 @@ public class BotCommandProcessor implements Processor {
             case QUERY_PAYMENT_STATUS -> callbackPaymentStatus(queryParams.get(1), messageId);
             case QUERY_CANCEL_ORDER -> doCancelOrder(queryParams.get(1), messageId);
             case QUERY_RECEIPT_STATUS -> getOperationStatus(queryParams.get(1), messageId);
-            case QUERY_REGISTER_RECEIPT -> doRegisterReceipt(queryParams.get(1), messageId);
+            case QUERY_REGISTER_RECEIPT -> doRegisterReceipt(queryParams.get(1), messageId, false);
+            case QUERY_REGISTER_RECEIPT_NDS -> doRegisterReceipt(queryParams.get(1), messageId, true);
             case QUERY_CANCEL_RECEIPT -> doCancelRegister(queryParams.get(1), messageId);
             case QUERY_PROCESS_PAYMENT -> doProcessPayment(queryParams.get(1), queryParams.get(2), messageId);
             case QUERY_CLEAR_MSG -> producer.sendBody(new EditMessageDelete(chatId, messageId));
@@ -145,7 +145,7 @@ public class BotCommandProcessor implements Processor {
     }
 
     @Transactional
-    public void doRegisterReceipt(String orderNumber, int messageId) {
+    public void doRegisterReceipt(String orderNumber, int messageId, boolean useNds) {
         DreamkasOperation.findByOrderNumber(orderNumber).ifPresent(receipOperation -> {
             if (receipOperation.operationId == null || receipOperation.operationStatus == OperationStatus.ERROR) {
                 Log.infof("Re-Processing orderNumber: %s", orderNumber);
@@ -153,7 +153,7 @@ public class BotCommandProcessor implements Processor {
                         new ReceiptOrder(
                                 receipOperation.amount, receipOperation.orderNumber, receipOperation.account,
                                 receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone),
-                                NdsCalculator.needNds(Instant.now())
+                                useNds
                         ));
             }
         });
@@ -163,6 +163,9 @@ public class BotCommandProcessor implements Processor {
         InlineKeyboardButton btnReg = InlineKeyboardButton.builder()
                 .text("🏦 Register").callbackData(QUERY_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
 
+        InlineKeyboardButton btnNds = InlineKeyboardButton.builder()
+                .text("🏦 Register").callbackData(QUERY_REGISTER_RECEIPT_NDS + ":" + receipt.orderNumber).build();
+
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
                 .text("🚮 Отмена").callbackData(QUERY_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
 
@@ -171,7 +174,7 @@ public class BotCommandProcessor implements Processor {
 
         if (receipt.operationId == null || receipt.operationStatus == OperationStatus.ERROR) {
             return InlineKeyboardMarkup.builder()
-                    .addRow(Arrays.asList(btnReg, btnStatus, btnCancel))
+                    .addRow(Arrays.asList(btnReg, btnNds))
                     .build();
         } else if (receipt.operationStatus == OperationStatus.SUCCESS) {
             return InlineKeyboardMarkup.builder()

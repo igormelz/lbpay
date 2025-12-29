@@ -16,7 +16,6 @@
 package ru.openfs.lbpay.model.dreamkas;
 
 import ru.openfs.lbpay.model.dreamkas.type.*;
-import ru.openfs.lbpay.utils.NdsCalculator;
 
 import java.util.List;
 
@@ -29,7 +28,7 @@ public record Receipt(
         List<Position> positions,
         List<Payment> payments,
         Attributes attributes,
-        List<FiscalTag> tags,
+        //List<FiscalTag> tags,
         Total total
 ) {
     // default
@@ -38,31 +37,17 @@ public record Receipt(
         this(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
                 List.of(new Position(productName, PositionType.SERVICE, 1, price, price, VatType.NDS_NO_TAX, 0)),
                 List.of(new Payment(price, PaymentType.CASHLESS)),
-                new Attributes(email, phone),
-                null,
-                new Total(price));
+                new Attributes(email, phone), new Total(price));
     }
 
-    // nds5 + tag 1125
+    // nds5 no tags
     public static Receipt createNds5(String externalId, Integer deviceId, Integer price, String email,
                                      String phone, String productName) {
-        return new Receipt(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
+        return new Receipt(externalId, deviceId, OperationType.SALE, 30, TaxMode.SIMPLE_WO,
                 List.of(new Position(productName, PositionType.SERVICE, 1, price, price,
-                        VatType.NDS_5, NdsCalculator.extractNDS5(price))),
+                        VatType.NDS_5, null)),
                 List.of(new Payment(price, PaymentType.CASHLESS)),
-                new Attributes(email, phone), null, new Total(price));
-    }
-
-    // nds5 + tag 1125
-    public static Receipt createNds5WithTags(String externalId, Integer deviceId, Integer price, String email,
-                                             String phone, String productName) {
-        return new Receipt(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
-                List.of(new Position(productName, PositionType.SERVICE, 1, price, price,
-                        VatType.NDS_5, NdsCalculator.extractNDS5(price))),
-                List.of(new Payment(price, PaymentType.CASHLESS)),
-                new Attributes(email, phone),
-                List.of(new FiscalTag(1125, 1)),
-                new Total(price));
+                new Attributes(email, phone), new Total(price));
     }
 
 }

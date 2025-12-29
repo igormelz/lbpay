@@ -72,7 +72,7 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
             try {
                 // call to register
                 var receipt = createReceipt(receiptOrder);
-                Log.infof("Create receipt with %s = %d", receipt.positions().getFirst().tax(), receipt.positions().getLast().taxSum());
+                Log.infof("Create receipt with %s", receipt.positions().getFirst().tax());
 
                 var response = dreamkasClient.register(receipt);
                 Optional.ofNullable(response).ifPresentOrElse(it -> {
@@ -102,7 +102,7 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
         var price = (int) (receiptOrder.amount() * 100);
 
         // feature
-        if(receiptOrder.useNds()) {
+        if(Boolean.TRUE.equals(receiptOrder.useNds())) {
             return Receipt.createNds5(receiptOrder.mdOrder(), deviceId, price, receiptOrder.info().email(), receiptOrder.info().phone(), productName);
         }
 
