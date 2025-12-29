@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 public class NdsCalculator {
     private static final long NDS_5_NUMERATOR = 5;
@@ -27,10 +28,10 @@ public class NdsCalculator {
     }
 
     public static boolean needNds(String payDate) {
-        return LocalDateTime.parse(payDate, BILL_DATE_FMT).isAfter(NEW_YEAR);
+        return Optional.ofNullable(payDate).map(it -> LocalDateTime.parse(it, BILL_DATE_FMT).isAfter(NEW_YEAR)).orElse(false);
     }
 
     public static boolean needNds(Instant payDate) {
-        return payDate.isAfter(NEW_YEAR_INSTANT);
+        return Optional.ofNullable(payDate).map(it -> it.isAfter(NEW_YEAR_INSTANT)).orElse(false);
     }
 }

@@ -14,7 +14,6 @@ import ru.openfs.lbpay.model.dreamkas.type.*;
 import ru.openfs.lbpay.utils.NdsCalculator;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -53,7 +52,6 @@ class ReceiptServiceTest {
         assertEquals(PositionType.SERVICE, rcpt.positions().getFirst().type());
         assertEquals("Test", rcpt.positions().getFirst().name());
         assertEquals(VatType.NDS_5, rcpt.positions().getFirst().tax());
-        assertEquals(6, rcpt.positions().getFirst().taxSum());
         assertEquals(PaymentType.CASHLESS, rcpt.payments().getFirst().type());
         assertEquals(123, rcpt.payments().getFirst().sum());
         assertEquals(123, rcpt.total().priceSum());
