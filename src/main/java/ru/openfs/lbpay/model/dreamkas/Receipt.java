@@ -35,7 +35,8 @@ public record Receipt(
     public Receipt(String externalId, Integer deviceId, Integer price, String email,
                    String phone, String productName) {
         this(externalId, deviceId, OperationType.SALE, 15, TaxMode.SIMPLE_WO,
-                List.of(new Position(productName, PositionType.SERVICE, 1, price, price, VatType.NDS_NO_TAX, 0)),
+                List.of(new Position(productName, PositionType.SERVICE, 1, price, price,
+                        VatType.NDS_NO_TAX, 0)),
                 List.of(new Payment(price, PaymentType.CASHLESS)),
                 new Attributes(email, phone), new Total(price));
     }

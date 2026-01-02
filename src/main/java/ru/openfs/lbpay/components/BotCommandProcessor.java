@@ -164,7 +164,7 @@ public class BotCommandProcessor implements Processor {
                 .text("🏦 Register").callbackData(QUERY_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnNds = InlineKeyboardButton.builder()
-                .text("🏦 Register").callbackData(QUERY_REGISTER_RECEIPT_NDS + ":" + receipt.orderNumber).build();
+                .text("🏦 Register NDS").callbackData(QUERY_REGISTER_RECEIPT_NDS + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
                 .text("🚮 Отмена").callbackData(QUERY_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();

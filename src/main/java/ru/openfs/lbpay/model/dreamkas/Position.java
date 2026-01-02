@@ -15,9 +15,11 @@
  */
 package ru.openfs.lbpay.model.dreamkas;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import ru.openfs.lbpay.model.dreamkas.type.PositionType;
 import ru.openfs.lbpay.model.dreamkas.type.VatType;
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record Position(
         String name,
         PositionType type,
