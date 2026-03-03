@@ -15,37 +15,28 @@
  */
 package ru.openfs.lbpay.components;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.Consumer;
-
-import jakarta.inject.Inject;
-import jakarta.inject.Singleton;
-import jakarta.transaction.Transactional;
-
-import org.apache.camel.Exchange;
-import org.apache.camel.Processor;
-import org.apache.camel.Produce;
-import org.apache.camel.ProducerTemplate;
-import org.apache.camel.component.telegram.model.EditMessageDelete;
-import org.apache.camel.component.telegram.model.EditMessageTextMessage;
-import org.apache.camel.component.telegram.model.IncomingCallbackQuery;
-import org.apache.camel.component.telegram.model.IncomingMessage;
-import org.apache.camel.component.telegram.model.InlineKeyboardButton;
-import org.apache.camel.component.telegram.model.InlineKeyboardMarkup;
-import org.apache.camel.component.telegram.model.OutgoingCallbackQueryMessage;
-import org.apache.camel.component.telegram.model.OutgoingTextMessage;
-
 import io.quarkus.logging.Log;
 import io.quarkus.panache.common.Sort;
 import io.quarkus.vertx.ConsumeEvent;
 import io.vertx.core.json.JsonObject;
 import io.vertx.mutiny.core.eventbus.EventBus;
+import jakarta.inject.Inject;
+import jakarta.inject.Singleton;
+import jakarta.transaction.Transactional;
+import org.apache.camel.Exchange;
+import org.apache.camel.Processor;
+import org.apache.camel.Produce;
+import org.apache.camel.ProducerTemplate;
+import org.apache.camel.component.telegram.model.*;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.dao.PrePaymentsDao;
 import ru.openfs.lbpay.model.dreamkas.type.OperationStatus;
 import ru.openfs.lbpay.model.entity.DreamkasOperation;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Consumer;
 
 @Singleton
 public class BotCommandProcessor implements Processor {
@@ -59,6 +50,7 @@ public class BotCommandProcessor implements Processor {
     private static final String QUERY_CLEAR_MSG = "clear_msg";
     private static final String QUERY_PROCESS_PAYMENT = "process_payment";
     private static final String QUERY_REGISTER_RECEIPT = "reg_receipt";
+    private static final String QUERY_REGISTER_RECEIPT_NDS = "reg_receipt_nds";
     private static final String QUERY_RECEIPT_STATUS = "receipt_status";
     private static final String QUERY_CANCEL_RECEIPT = "cancel_receipt";
 
@@ -76,7 +68,7 @@ public class BotCommandProcessor implements Processor {
 
     /**
      * hanlde error message
-     * 
+     *
      * @param message
      */
     @ConsumeEvent(value = "notify-error", blocking = true)
@@ -117,7 +109,8 @@ public class BotCommandProcessor implements Processor {
             case QUERY_PAYMENT_STATUS -> callbackPaymentStatus(queryParams.get(1), messageId);
             case QUERY_CANCEL_ORDER -> doCancelOrder(queryParams.get(1), messageId);
             case QUERY_RECEIPT_STATUS -> getOperationStatus(queryParams.get(1), messageId);
-            case QUERY_REGISTER_RECEIPT -> doRegisterReceipt(queryParams.get(1), messageId);
+            case QUERY_REGISTER_RECEIPT -> doRegisterReceipt(queryParams.get(1), messageId, false);
+            case QUERY_REGISTER_RECEIPT_NDS -> doRegisterReceipt(queryParams.get(1), messageId, true);
             case QUERY_CANCEL_RECEIPT -> doCancelRegister(queryParams.get(1), messageId);
             case QUERY_PROCESS_PAYMENT -> doProcessPayment(queryParams.get(1), queryParams.get(2), messageId);
             case QUERY_CLEAR_MSG -> producer.sendBody(new EditMessageDelete(chatId, messageId));
@@ -133,7 +126,7 @@ public class BotCommandProcessor implements Processor {
             case CMD_START -> producer.sendBody("Starting LBPAY Notify Bot");
             case CMD_PENDING_ORDERS -> getPendingOrders();
             case CMD_WAITING_RECEIPTS -> getWaitingReceipts();
-            
+
             default -> Log.warnf("Unknown command: %s", command);
         }
     }
@@ -152,14 +145,16 @@ public class BotCommandProcessor implements Processor {
     }
 
     @Transactional
-    public void doRegisterReceipt(String orderNumber, int messageId) {
+    public void doRegisterReceipt(String orderNumber, int messageId, boolean useNds) {
         DreamkasOperation.findByOrderNumber(orderNumber).ifPresent(receipOperation -> {
             if (receipOperation.operationId == null || receipOperation.operationStatus == OperationStatus.ERROR) {
                 Log.infof("Re-Processing orderNumber: %s", orderNumber);
                 eventBus.send("register-receipt",
                         new ReceiptOrder(
                                 receipOperation.amount, receipOperation.orderNumber, receipOperation.account,
-                                receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone)));
+                                receipOperation.externalId, new ReceiptCustomer(receipOperation.email, receipOperation.phone),
+                                useNds
+                        ));
             }
         });
     }
@@ -167,6 +162,9 @@ public class BotCommandProcessor implements Processor {
     private InlineKeyboardMarkup receiptKeyboardMarkup(DreamkasOperation receipt) {
         InlineKeyboardButton btnReg = InlineKeyboardButton.builder()
                 .text("🏦 Register").callbackData(QUERY_REGISTER_RECEIPT + ":" + receipt.orderNumber).build();
+
+        InlineKeyboardButton btnNds = InlineKeyboardButton.builder()
+                .text("🏦 Register NDS").callbackData(QUERY_REGISTER_RECEIPT_NDS + ":" + receipt.orderNumber).build();
 
         InlineKeyboardButton btnCancel = InlineKeyboardButton.builder()
                 .text("🚮 Отмена").callbackData(QUERY_CANCEL_RECEIPT + ":" + receipt.orderNumber).build();
@@ -176,7 +174,7 @@ public class BotCommandProcessor implements Processor {
 
         if (receipt.operationId == null || receipt.operationStatus == OperationStatus.ERROR) {
             return InlineKeyboardMarkup.builder()
-                    .addRow(Arrays.asList(btnReg, btnStatus, btnCancel))
+                    .addRow(Arrays.asList(btnReg, btnNds))
                     .build();
         } else if (receipt.operationStatus == OperationStatus.SUCCESS) {
             return InlineKeyboardMarkup.builder()
@@ -286,9 +284,9 @@ public class BotCommandProcessor implements Processor {
                                                 .builder()
                                                 .addRow(Arrays.asList(InlineKeyboardButton.builder().text("💳 payment")
                                                         .callbackData(QUERY_PROCESS_PAYMENT + ":" +
-                                                                      orderNumber + ":" +
-                                                                      json.getJsonArray("attributes").getJsonObject(0)
-                                                                              .getString("value"))
+                                                                orderNumber + ":" +
+                                                                json.getJsonArray("attributes").getJsonObject(0)
+                                                                        .getString("value"))
                                                         .build()))
                                                 .build())
                                 .build();

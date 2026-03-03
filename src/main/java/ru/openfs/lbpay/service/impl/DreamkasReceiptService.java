@@ -72,7 +72,7 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
             try {
                 // call to register
                 var receipt = createReceipt(receiptOrder);
-                Log.debugf("Create receipt: %s", receipt);
+                Log.infof("Create receipt with %s", receipt.positions().getFirst().tax());
 
                 var response = dreamkasClient.register(receipt);
                 Optional.ofNullable(response).ifPresentOrElse(it -> {
@@ -101,13 +101,17 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
         // calc service price to coins
         var price = (int) (receiptOrder.amount() * 100);
 
+        // feature
+        if(Boolean.TRUE.equals(receiptOrder.useNds())) {
+            return Receipt.createNds5(receiptOrder.mdOrder(), deviceId, price, receiptOrder.info().email(), receiptOrder.info().phone(), productName);
+        }
+
         return new Receipt(receiptOrder.mdOrder(), deviceId, price, receiptOrder.info().email(), receiptOrder.info().phone(), productName);
     }
 
     /**
      * call dk to get operation status
      * 
-     * @param  operationId
      * @return Operation
      */
     @ConsumeEvent("get-register-status")
@@ -122,8 +126,7 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
 
     /**
      * process audit operation
-     * 
-     * @param operation
+     *
      */
     @Transactional
     public void processOperation(Operation operation) {

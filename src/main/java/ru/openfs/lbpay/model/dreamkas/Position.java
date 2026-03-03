@@ -15,8 +15,18 @@
  */
 package ru.openfs.lbpay.model.dreamkas;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import ru.openfs.lbpay.model.dreamkas.type.PositionType;
 import ru.openfs.lbpay.model.dreamkas.type.VatType;
 
-public record Position(String name, PositionType type, Integer quantity, Integer price, Integer priceSum, VatType tax,
-                       Integer taxSum) {}
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public record Position(
+        String name,
+        PositionType type,
+        Integer quantity,
+        Integer price,
+        Integer priceSum,
+        VatType tax,
+        Integer taxSum
+) {
+}

@@ -17,4 +17,8 @@ package ru.openfs.lbpay.model.dreamkas;
 
 import ru.openfs.lbpay.model.dreamkas.type.PaymentType;
 
-public record Payment(Integer sum, PaymentType type) {}
+public record Payment(
+        Integer sum,
+        PaymentType type
+) {
+}

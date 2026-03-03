@@ -25,6 +25,9 @@ import ru.openfs.lbpay.exception.PaymentException;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.service.PaymentService;
+import ru.openfs.lbpay.utils.NdsCalculator;
+
+import java.time.Instant;
 
 @ApplicationScoped
 public class LbCoreSoapPaymentService implements PaymentService {
@@ -37,12 +40,12 @@ public class LbCoreSoapPaymentService implements PaymentService {
 
     /**
      * process payment by orderNumber
-     * 
+     *
      * @param orderNumber the orderNumber to paid
      * @param mdOrder     the orderNumber reference id
      */
-    public void processPayment(Long orderNumber, String mdOrder) {
-        Log.debugf("start payment for:[%d]", orderNumber);
+    public void processPayment(Long orderNumber, String mdOrder, Instant payDate) {
+        Log.debugf("start payment for:[%d] payDate:[%s]", orderNumber, payDate);
         try (var adapter = lbCoreSoapClient.getSessionAdapter()) {
 
             var order = adapter.findPrePaymentByOrderNumber(orderNumber)
@@ -64,7 +67,7 @@ public class LbCoreSoapPaymentService implements PaymentService {
             Log.infof("Payment orderNumber:[%d], account:[%s], amount:[%.2f], id:[%s]",
                     orderNumber, agrm.getNumber(), order.getAmount(), mdOrder);
 
-            createReceiptOrder(order.getAmount(), String.valueOf(orderNumber), agrm.getNumber(), mdOrder, acct);
+            createReceiptOrder(order.getAmount(), String.valueOf(orderNumber), agrm.getNumber(), mdOrder, acct, payDate);
 
         } catch (Exception e) {
             eventBus.send("notify-error", String.format("orderNumber:[%d] - %s", orderNumber, e.getMessage()));
@@ -74,7 +77,7 @@ public class LbCoreSoapPaymentService implements PaymentService {
 
     /**
      * process decline orderNumber
-     * 
+     *
      * @param orderNumber the orderNumber to decline
      */
     public void processDecline(long orderNumber, String mdOrder) {
@@ -100,13 +103,14 @@ public class LbCoreSoapPaymentService implements PaymentService {
         }
     }
 
-    private void createReceiptOrder(
-            double amount, String orderNumber, String account, String externalId, SoapAccountFull acctInfo) {
+    private void createReceiptOrder(double amount, String orderNumber, String account, String externalId,
+                                    SoapAccountFull acctInfo, Instant payDate) {
         eventBus.send("register-receipt", new ReceiptOrder(
-                amount, orderNumber, account, externalId,
-                new ReceiptCustomer(
-                        acctInfo.getAccount().getEmail(),
-                        acctInfo.getAccount().getMobile())));
+                        amount, orderNumber, account, externalId,
+                        new ReceiptCustomer(acctInfo.getAccount().getEmail(), acctInfo.getAccount().getMobile()),
+                        NdsCalculator.needNds(payDate)
+                )
+        );
     }
 
 }

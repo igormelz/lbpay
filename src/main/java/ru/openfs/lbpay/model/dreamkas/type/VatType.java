@@ -18,8 +18,13 @@ package ru.openfs.lbpay.model.dreamkas.type;
 public enum VatType {
     NDS_NO_TAX,
     NDS_0,
+    NDS_5,
+    NDS_7,
     NDS_10,
     NDS_20,
+    NDS_5_CALCULATED,
+    NDS_7_CALCULATED,
     NDS_10_CALCULATED,
-    NDS_20_CALCULATED
+    NDS_20_CALCULATED,
+
 }

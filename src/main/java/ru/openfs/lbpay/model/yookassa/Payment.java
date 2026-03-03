@@ -17,6 +17,8 @@ package ru.openfs.lbpay.model.yookassa;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.Instant;
+
 public record Payment(
     String id, 
     String status,
@@ -26,7 +28,7 @@ public record Payment(
     Recepient recepient,
     @JsonProperty("payment_method") PaymentMethod paymentMethod,
     @JsonProperty("created_at") String createdAt,
-    @JsonProperty("captured_at") String capturedAt,
+    @JsonProperty("captured_at") Instant capturedAt,
     @JsonProperty("expires_at") String expiresAt, 
     Confirmation confirmation,
     MetaData metadata,

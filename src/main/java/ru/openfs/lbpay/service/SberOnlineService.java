@@ -15,10 +15,6 @@
  */
 package ru.openfs.lbpay.service;
 
-import static ru.openfs.lbpay.model.sberonline.SberOnlineResponseType.*;
-
-import java.util.UUID;
-
 import api3.SoapAccountFull;
 import api3.SoapPaymentFull;
 import io.quarkus.logging.Log;
@@ -30,6 +26,11 @@ import ru.openfs.lbpay.exception.SberOnlineException;
 import ru.openfs.lbpay.model.ReceiptCustomer;
 import ru.openfs.lbpay.model.ReceiptOrder;
 import ru.openfs.lbpay.model.sberonline.SberOnlineResponse;
+import ru.openfs.lbpay.utils.NdsCalculator;
+
+import java.util.UUID;
+
+import static ru.openfs.lbpay.model.sberonline.SberOnlineResponseType.*;
 
 @ApplicationScoped
 public class SberOnlineService {
@@ -42,8 +43,8 @@ public class SberOnlineService {
 
     /**
      * process SberOnline check account
-     * 
-     * @param  account
+     *
+     * @param account
      * @return
      */
     public SberOnlineResponse processCheckAccount(String account) {
@@ -70,11 +71,11 @@ public class SberOnlineService {
 
     /**
      * process sber online payment
-     * 
-     * @param  account
-     * @param  payId
-     * @param  amount
-     * @param  payDate
+     *
+     * @param account
+     * @param payId
+     * @param amount
+     * @param payDate as 'yyyy-MM-dd HH:mm:ss'
      * @return
      */
     public SberOnlineResponse processPayment(String account, String payId, Double amount, String payDate) {
@@ -99,7 +100,7 @@ public class SberOnlineService {
                     .orElseThrow(() -> new SberOnlineException(TMP_ERR, "payment not processed"));
 
             // invoke receipt 
-            registerReceipt(amount, payId, account, acctInfo);
+            registerReceipt(amount, payId, account, acctInfo, payDate);
 
             Log.infof("Payment account:[%s], amount:[%.2f], id:[%s]", account, amount, payId);
 
@@ -117,7 +118,7 @@ public class SberOnlineService {
                 .responseType(OK)
                 .setBalance(balance)
                 .setRecSum(recSum)
-                .setAddress(acctInfo.getAddresses().isEmpty() ? null : acctInfo.getAddresses().get(0).getAddress())
+                .setAddress(acctInfo.getAddresses().isEmpty() ? null : acctInfo.getAddresses().getFirst().getAddress())
                 .build();
     }
 
@@ -139,11 +140,13 @@ public class SberOnlineService {
                 .build();
     }
 
-    private void registerReceipt(double amount, String orderNumber, String account, SoapAccountFull acctInfo) {
+    private void registerReceipt(double amount, String orderNumber, String account, SoapAccountFull acctInfo, String payDate) {
         eventBus.send("register-receipt", new ReceiptOrder(
                 amount, orderNumber, account, UUID.randomUUID().toString(),
                 new ReceiptCustomer(
                         acctInfo.getAccount().getEmail(),
-                        acctInfo.getAccount().getMobile())));
+                        acctInfo.getAccount().getMobile()),
+                NdsCalculator.needNds(payDate)
+        ));
     }
 }
