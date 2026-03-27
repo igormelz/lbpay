@@ -1,4 +1,0 @@
-<b>Заказ:</b> #{order.orderNumber} 
-<b>Создан:</b> {time:format(order.payDate, "d MMM uuuu HH:mm:ss")}
-🕐 {order.diff} seconds ago
-{#if order.comments}💬 <i>{order.comments}</i>{/if}

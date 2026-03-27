@@ -43,6 +43,9 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
     private static final Pattern EMAIL = Pattern.compile("^([a-zA-Z0-9_\\-\\.]+)@([a-zA-Z0-9_\\-\\.]+)\\.([a-zA-Z]{2,5})$");
     private static final Pattern PHONE = Pattern.compile("^\\+?[1-9]\\d{10,13}+$");
 
+    @ConfigProperty(name = "dreamks.tax", defaultValue = "false")
+    Boolean useNds;
+
     @ConfigProperty(name = "dreamkas.deviceId", defaultValue = "123456")
     Integer deviceId;
 
@@ -102,7 +105,8 @@ public class DreamkasReceiptService implements ReceiptService, ReceiptOperation 
         var price = (int) (receiptOrder.amount() * 100);
 
         // feature
-        if(Boolean.TRUE.equals(receiptOrder.useNds())) {
+        //if(Boolean.TRUE.equals(receiptOrder.useNds())) {
+        if(Boolean.TRUE.equals(useNds)) {
             return Receipt.createNds5(receiptOrder.mdOrder(), deviceId, price, receiptOrder.info().email(), receiptOrder.info().phone(), productName);
         }
 

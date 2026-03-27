@@ -1,2 +1,0 @@
-💳 Заказ #{orderNumber} {icon} {status}
-💬 {message}
