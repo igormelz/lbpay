@@ -40,3 +40,4 @@ nb-configuration.xml
 receipt.json
 docs
 .quarkus
+/.quarkus/
